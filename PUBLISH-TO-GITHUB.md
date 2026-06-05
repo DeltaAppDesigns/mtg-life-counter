@@ -106,3 +106,4 @@ If you ever want to change the app:
   show up in Google unless you share it. There's nothing private in the app.
 - **Your data stays on your device.** Life totals are saved in your phone's
   browser, not uploaded anywhere.
+<!-- BUILD-STAMP 2026-06-05 v10.0.1 -->
