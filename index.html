@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>MTG Life Counter</title>
+<meta name="description" content="Format-aware life and commander-damage tracker for Magic: The Gathering.">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Life Counter">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0a0a0a; color: #fff; user-select: none; }
+
+  /* ===== Top toolbar ===== */
+  .toolbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px; z-index: 100; border-bottom: 1px solid #222;
+  }
+  .toolbar-left, .toolbar-right { display: flex; gap: 8px; align-items: center; }
+  .tb-btn {
+    background: #1f1f1f; border: 1px solid #333; color: #fff;
+    padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; font-weight: 500;
+  }
+  .tb-btn:hover { background: #2a2a2a; }
+  .tb-btn:active { transform: scale(0.97); }
+  .tb-title { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; color: #ddd; }
+
+  /* ===== Player grid ===== */
+  .grid { position: fixed; top: 48px; bottom: 0; left: 0; right: 0; display: grid; gap: 4px; padding: 4px; background: #000; }
+  .grid.p2 { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .grid.p3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  .grid.p3 .player:nth-child(3) { grid-column: 1 / span 2; }
+  .grid.p4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  .grid.p5 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  .grid.p5 .player:nth-child(5) { grid-column: 2 / span 1; }
+  .grid.p6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+  /* ===== Player tile ===== */
+  .player {
+    position: relative; border-radius: 12px; overflow: hidden;
+    transition: filter 0.3s ease;
+  }
+  .player.dead { filter: grayscale(0.85) brightness(0.4); }
+  .player.dead::after {
+    content: "DEFEATED"; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-12deg);
+    font-size: 32px; font-weight: 900; color: rgba(255,255,255,0.85);
+    letter-spacing: 4px; pointer-events: none; z-index: 5;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  }
+  .player.winner {
+    box-shadow: inset 0 0 0 3px #fbbf24, 0 0 40px rgba(251,191,36,0.5);
+    animation: winner-pulse 1.8s ease-in-out infinite;
+  }
+  .player.winner::before {
+    content: "👑 VICTORY 👑"; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-6deg);
+    font-size: 42px; font-weight: 900;
+    color: #fbbf24;
+    letter-spacing: 4px; pointer-events: none; z-index: 6;
+    text-shadow: 0 0 24px rgba(251,191,36,0.9), 0 4px 12px rgba(0,0,0,0.8);
+    white-space: nowrap;
+    animation: winner-bob 2s ease-in-out infinite;
+  }
+  @keyframes winner-pulse {
+    0%, 100% { box-shadow: inset 0 0 0 3px #fbbf24, 0 0 30px rgba(251,191,36,0.4); }
+    50%      { box-shadow: inset 0 0 0 3px #fde047, 0 0 50px rgba(251,191,36,0.75); }
+  }
+  @keyframes winner-bob {
+    0%, 100% { transform: translate(-50%, -50%) rotate(-6deg) scale(1); }
+    50%      { transform: translate(-50%, -50%) rotate(-6deg) scale(1.08); }
+  }
+
+  /* Player background colors */
+  .player[data-color="red"]    { background: linear-gradient(135deg, #8b1a1a, #c92929); }
+  .player[data-color="blue"]   { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+  .player[data-color="green"]  { background: linear-gradient(135deg, #14532d, #16a34a); }
+  .player[data-color="white"]  { background: linear-gradient(135deg, #d4d4d4, #fafafa); color: #1a1a1a; }
+  .player[data-color="black"]  { background: linear-gradient(135deg, #1a1a1a, #404040); }
+  .player[data-color="purple"] { background: linear-gradient(135deg, #581c87, #9333ea); }
+  .player[data-color="orange"] { background: linear-gradient(135deg, #9a3412, #ea580c); }
+  .player[data-color="teal"]   { background: linear-gradient(135deg, #134e4a, #0d9488); }
+  .player[data-color="pink"]   { background: linear-gradient(135deg, #831843, #db2777); }
+  .player[data-color="gold"]   { background: linear-gradient(135deg, #713f12, #ca8a04); }
+
+  /* Rotation wrapper: rotates everything inside the tile */
+  .p-content {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    transform-origin: center center;
+    transition: transform 0.25s ease;
+  }
+  .player[data-rotation="180"] .p-content { transform: rotate(180deg); }
+  .player[data-rotation="90"] .p-content,
+  .player[data-rotation="270"] .p-content {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: var(--tile-h, 100%);
+    height: var(--tile-w, 100%);
+  }
+  .player[data-rotation="90"]  .p-content { transform: translate(-50%, -50%) rotate(90deg); }
+  .player[data-rotation="270"] .p-content { transform: translate(-50%, -50%) rotate(-90deg); }
+
+  /* Rotation badge stays in screen-space corner regardless of tile orientation */
+  .rotation-badge {
+    position: absolute; top: 6px; left: 6px; z-index: 6;
+    background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.18);
+    color: #fff; width: 28px; height: 28px; border-radius: 50%;
+    font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0.6; transition: opacity 0.15s;
+  }
+  .rotation-badge:hover { opacity: 1; }
+
+  /* Two-Headed Giant team label, screen-space top-right corner */
+  .team-badge {
+    position: absolute; top: 6px; right: 6px; z-index: 6;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.22);
+    color: #fff; padding: 3px 9px; border-radius: 12px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    pointer-events: none;
+  }
+  .player[data-color="white"] .team-badge { color: #1a1a1a; background: rgba(255,255,255,0.55); border-color: rgba(0,0,0,0.25); }
+
+  /* Header strip */
+  .p-header {
+    display: flex; align-items: center; justify-content: center;
+    padding: 8px 12px; background: rgba(0,0,0,0.25);
+    gap: 8px;
+  }
+  .p-name {
+    background: transparent; border: none; color: inherit;
+    font-size: 16px; font-weight: 600; outline: none;
+    flex: 0 1 auto; padding: 4px 8px; border-radius: 4px;
+    text-overflow: ellipsis; min-width: 0;
+    text-align: center; max-width: 70%;
+  }
+  .p-name:focus { background: rgba(255,255,255,0.15); }
+  .p-menu-btn {
+    background: rgba(255,255,255,0.15); border: none; color: inherit;
+    width: 32px; height: 32px; border-radius: 50%; font-size: 18px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .p-menu-btn:hover { background: rgba(255,255,255,0.25); }
+
+  /* Life display */
+  .life-area { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; min-height: 0; }
+  .life-btn {
+    position: absolute; top: 0; bottom: 0; width: 45%;
+    background: transparent; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 48px; font-weight: 300; color: rgba(255,255,255,0.4);
+    transition: background 0.15s, color 0.15s;
+    touch-action: none; /* keep the browser from stealing a press as a scroll/long-press gesture mid-hold */
+  }
+  .player[data-color="white"] .life-btn { color: rgba(0,0,0,0.4); }
+  .life-btn.minus { left: 0; }
+  .life-btn.plus { right: 0; }
+  .life-btn:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+  .player[data-color="white"] .life-btn:hover { background: rgba(0,0,0,0.08); color: rgba(0,0,0,0.9); }
+  .life-btn:active { background: rgba(255,255,255,0.18); }
+
+  .life-display {
+    font-size: clamp(64px, 12vw, 150px); font-weight: 700; line-height: 1;
+    text-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    pointer-events: auto; cursor: pointer; position: relative; z-index: 2;
+    font-variant-numeric: tabular-nums; border-radius: 12px;
+    transition: transform 0.1s, background 0.15s;
+  }
+  .life-display:hover { background: rgba(255,255,255,0.06); }
+  .player[data-color="white"] .life-display:hover { background: rgba(0,0,0,0.06); }
+  .life-display:active { transform: scale(0.96); }
+  .life-delta {
+    position: absolute; top: 10%; font-size: 26px; font-weight: 600;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+  }
+  .life-delta.show { opacity: 0.95; }
+  .life-delta.positive { color: #4ade80; }
+  .life-delta.negative { color: #f87171; }
+
+  /* Counters row */
+  .counters {
+    display: flex; flex-wrap: wrap; gap: 8px; padding: 10px;
+    background: rgba(0,0,0,0.35); justify-content: center;
+    max-height: 150px; overflow-y: auto;
+  }
+  .counter {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15);
+    padding: 5px 7px; border-radius: 20px; font-size: 17px;
+    transition: background 0.15s;
+  }
+  .counter:hover { background: rgba(0,0,0,0.6); }
+  .counter .icon { font-size: 20px; margin: 0 2px; }
+  .counter .val { font-weight: 700; min-width: 28px; text-align: center; font-size: 19px; }
+  .counter .label-sub { font-size: 13px; opacity: 0.85; margin: 0 3px; white-space: nowrap; }
+  .cnt-btn {
+    background: rgba(255,255,255,0.2); border: none; color: inherit;
+    width: 30px; height: 30px; border-radius: 50%;
+    font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-weight: 700;
+  }
+  .cnt-btn:hover { background: rgba(255,255,255,0.35); }
+  .cnt-btn:active { transform: scale(0.9); }
+  .player[data-color="white"] .cnt-btn { background: rgba(0,0,0,0.15); }
+  .player[data-color="white"] .cnt-btn:hover { background: rgba(0,0,0,0.3); }
+  .counter.poison { border-color: #84cc16; }
+  .counter.poison .val { color: #a3e635; }
+  .counter.poison.danger .val { color: #ef4444; }
+  .counter.commander { border-color: #f59e0b; }
+  .counter.commander.danger .val { color: #ef4444; }
+  .counter.energy { border-color: #06b6d4; }
+  .counter.exp { border-color: #a855f7; }
+  .counter.tax { border-color: #22c55e; }
+  .counter.tax .val { color: #86efac; }
+
+  /* ===== Two-Headed Giant combined team tile ===== */
+  /* One tile holds the shared life total on top, then a side-by-side column for
+     each of the two teammates (name, settings menu, and their own counters). */
+  .team-tile .life-area { flex: 0 0 auto; min-height: 0; padding: 4px 0; }
+  .team-tile .life-display { font-size: clamp(48px, 9vw, 110px); }
+  .team-cols {
+    flex: 1; display: flex; gap: 4px; min-height: 0;
+    padding: 4px 6px 8px; overflow: hidden;
+  }
+  .tc-col {
+    flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+    background: rgba(0,0,0,0.18); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; overflow: hidden;
+  }
+  .tc-col-head {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px; background: rgba(0,0,0,0.28);
+  }
+  .tc-col-head .roll-swatch { width: 14px; height: 14px; }
+  .tc-col-head .p-name {
+    flex: 1 1 auto; min-width: 0; background: transparent; border: none;
+    color: inherit; font-size: 15px; font-weight: 600; outline: none;
+    padding: 2px 4px; border-radius: 4px; text-overflow: ellipsis; text-align: left;
+  }
+  .tc-col-head .p-name:focus { background: rgba(255,255,255,0.15); }
+  .tc-col-head .p-menu-btn { width: 28px; height: 28px; font-size: 16px; }
+  .tc-col .counters {
+    flex: 1; align-content: flex-start; max-height: none; overflow-y: auto;
+    background: transparent; padding: 8px;
+  }
+
+  /* ===== Modal ===== */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-backdrop.active { display: flex; }
+  .modal {
+    background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+    padding: 24px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; }
+  .modal h3 { font-size: 13px; margin: 18px 0 8px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; margin-bottom: 6px; color: #bbb; }
+  .field input[type=number], .field input[type=text], .field select {
+    width: 100%; background: #0a0a0a; border: 1px solid #333; color: #fff;
+    padding: 8px 10px; border-radius: 6px; font-size: 14px;
+  }
+  .color-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+  .swatch {
+    width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+    border: 3px solid transparent; transition: transform 0.15s;
+  }
+  .swatch:hover { transform: scale(1.1); }
+  .swatch.selected { border-color: #fff; }
+  .swatch[data-color="red"]    { background: #c92929; }
+  .swatch[data-color="blue"]   { background: #2563eb; }
+  .swatch[data-color="green"]  { background: #16a34a; }
+  .swatch[data-color="white"]  { background: #fafafa; }
+  .swatch[data-color="black"]  { background: #404040; }
+  .swatch[data-color="purple"] { background: #9333ea; }
+  .swatch[data-color="orange"] { background: #ea580c; }
+  .swatch[data-color="teal"]   { background: #0d9488; }
+  .swatch[data-color="pink"]   { background: #db2777; }
+  .swatch[data-color="gold"]   { background: #ca8a04; }
+
+  .counter-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ctog {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    background: #0a0a0a; border: 1px solid #333; border-radius: 6px; cursor: pointer;
+    font-size: 13px;
+  }
+  .ctog input { cursor: pointer; }
+
+  .seg {
+    display: flex; gap: 4px; background: #0a0a0a; padding: 4px; border-radius: 8px; border: 1px solid #333;
+  }
+  .seg button {
+    flex: 1; padding: 8px; background: transparent; border: none; color: #aaa;
+    border-radius: 5px; cursor: pointer; font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .seg button.active { background: #2563eb; color: #fff; }
+  .seg button:hover:not(.active) { background: #1f1f1f; color: #fff; }
+  .seg .rot-icon { display: inline-block; font-size: 16px; }
+
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .btn-primary {
+    background: #2563eb; border: none; color: #fff; padding: 10px 18px;
+    border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px;
+  }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary {
+    background: #333; border: none; color: #fff; padding: 10px 18px;
+    border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  .btn-secondary:hover { background: #444; }
+  .btn-danger { background: #991b1b; }
+  .btn-danger:hover { background: #b91c1c; }
+
+  .cmd-block {
+    background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 8px;
+    padding: 10px; margin-bottom: 8px;
+  }
+  .cmd-block .who { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #ddd; }
+  .cmd-row {
+    display: flex; align-items: center; gap: 8px; padding: 4px 0;
+  }
+  .cmd-row .clabel { flex: 1; font-size: 12px; color: #bbb; }
+  .cmd-row .vctrl { display: flex; align-items: center; gap: 6px; }
+  .cmd-row button {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #333; border: none; color: #fff; cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cmd-row button:hover { background: #444; }
+  .cmd-row .vnum { min-width: 22px; text-align: center; font-weight: 700; font-size: 13px; }
+  .cmd-row .vnum.danger { color: #ef4444; }
+
+  .tax-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  }
+  .tax-row .clabel { flex: 1; font-size: 13px; }
+  .tax-row .vctrl { display: flex; align-items: center; gap: 6px; }
+  .tax-row button {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #333; border: none; color: #fff; cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tax-row .vnum { min-width: 28px; text-align: center; font-weight: 700; }
+
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* ===== Roll modal ===== */
+  .roll-modal { max-width: 480px; }
+  .roll-header {
+    text-align: center; margin-bottom: 16px;
+  }
+  .roll-status {
+    font-size: 14px; color: #aaa; min-height: 20px; margin-top: 6px;
+  }
+  .roll-status .winner-name { color: #fbbf24; font-weight: 700; }
+  .roll-list { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+  .roll-row {
+    display: flex; align-items: center; gap: 12px;
+    background: #0a0a0a; border: 1px solid #2a2a2a;
+    padding: 10px 14px; border-radius: 8px;
+    transition: all 0.3s ease;
+  }
+  .roll-row.dimmed { opacity: 0.35; }
+  .roll-row.winner {
+    border-color: #fbbf24; background: linear-gradient(90deg, rgba(251,191,36,0.15), rgba(251,191,36,0.03));
+    box-shadow: 0 0 16px rgba(251,191,36,0.25);
+  }
+  .roll-row.tied { border-color: #f97316; }
+  .roll-swatch {
+    width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .roll-swatch[data-color="red"]    { background: #c92929; }
+  .roll-swatch[data-color="blue"]   { background: #2563eb; }
+  .roll-swatch[data-color="green"]  { background: #16a34a; }
+  .roll-swatch[data-color="white"]  { background: #fafafa; }
+  .roll-swatch[data-color="black"]  { background: #404040; }
+  .roll-swatch[data-color="purple"] { background: #9333ea; }
+  .roll-swatch[data-color="orange"] { background: #ea580c; }
+  .roll-swatch[data-color="teal"]   { background: #0d9488; }
+  .roll-swatch[data-color="pink"]   { background: #db2777; }
+  .roll-swatch[data-color="gold"]   { background: #ca8a04; }
+  .roll-name { flex: 1; font-size: 15px; font-weight: 600; }
+  .roll-value {
+    font-size: 28px; font-weight: 800; min-width: 56px; text-align: center;
+    font-variant-numeric: tabular-nums; color: #fff;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .roll-row.rolling .roll-value { color: #60a5fa; animation: roll-flicker 0.08s steps(1) infinite; }
+  .roll-row.winner .roll-value { color: #fbbf24; }
+  .roll-row.tied .roll-value { color: #fb923c; }
+  .roll-crown { font-size: 18px; min-width: 24px; text-align: center; }
+  @keyframes roll-flicker { 0% { opacity: 0.6; } 50% { opacity: 1; } }
+
+  .roll-die-select { display: flex; gap: 6px; justify-content: center; margin-bottom: 8px; }
+  .roll-die-select button {
+    background: #0a0a0a; border: 1px solid #333; color: #aaa;
+    padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    font-weight: 600;
+  }
+  .roll-die-select button.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+  .roll-die-select button:hover:not(.active) { background: #1f1f1f; color: #fff; }
+
+  /* ===== Profiles ===== */
+  .profile-list {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
+    max-height: 140px; overflow-y: auto;
+  }
+  .profile-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #0a0a0a; border: 1px solid #333;
+    padding: 4px 4px 4px 8px; border-radius: 16px;
+    font-size: 13px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .profile-chip:hover { background: #1f1f1f; border-color: #555; }
+  .profile-chip .pcolor {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25); flex-shrink: 0;
+  }
+  .profile-chip .pcolor[data-color="red"]    { background: #c92929; }
+  .profile-chip .pcolor[data-color="blue"]   { background: #2563eb; }
+  .profile-chip .pcolor[data-color="green"]  { background: #16a34a; }
+  .profile-chip .pcolor[data-color="white"]  { background: #fafafa; }
+  .profile-chip .pcolor[data-color="black"]  { background: #404040; }
+  .profile-chip .pcolor[data-color="purple"] { background: #9333ea; }
+  .profile-chip .pcolor[data-color="orange"] { background: #ea580c; }
+  .profile-chip .pcolor[data-color="teal"]   { background: #0d9488; }
+  .profile-chip .pcolor[data-color="pink"]   { background: #db2777; }
+  .profile-chip .pcolor[data-color="gold"]   { background: #ca8a04; }
+  .profile-chip .pname { font-weight: 600; }
+  .profile-chip .psub { font-size: 11px; color: #999; }
+  .profile-chip .pdel {
+    background: rgba(255,255,255,0.08); border: none; color: #aaa;
+    width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
+    font-size: 14px; line-height: 1; display: inline-flex;
+    align-items: center; justify-content: center; padding: 0;
+    margin-left: 2px;
+  }
+  .profile-chip .pdel:hover { background: #991b1b; color: #fff; }
+  .profile-empty {
+    color: #777; font-size: 13px; font-style: italic; padding: 6px 0;
+  }
+  .profile-actions { display: flex; gap: 8px; }
+  .btn-small {
+    background: #1f1f1f; border: 1px solid #333; color: #fff;
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-weight: 500;
+  }
+  .btn-small:hover { background: #2a2a2a; }
+  .btn-small.primary { background: #2563eb; border-color: #2563eb; }
+  .btn-small.primary:hover { background: #1d4ed8; }
+
+  /* ===== Leaderboard ===== */
+  .lb-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; background: #0a0a0a;
+    border: 1px solid #2a2a2a; border-radius: 8px; margin-bottom: 8px;
+  }
+  .lb-rank { font-size: 18px; min-width: 28px; text-align: center; font-weight: 700; }
+  .lb-name { flex: 1; font-weight: 600; font-size: 15px; }
+  .lb-wins { font-weight: 700; color: #fbbf24; font-size: 14px; }
+  .profile-chip .pwins, .cmd-chip .pwins { font-size: 11px; color: #fbbf24; font-weight: 700; margin-left: 2px; }
+  .lb-player { margin-bottom: 8px; }
+  .lb-player .lb-row { margin-bottom: 0; }
+  .lb-cmd-list {
+    margin: 4px 0 0 30px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .lb-cmd-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px; background: #0d0d0d;
+    border: 1px solid #222; border-radius: 6px;
+  }
+  .lb-cmd-name { flex: 1; font-size: 13px; color: #ddd; }
+  .lb-cmd-wins { font-size: 12px; font-weight: 700; color: #d4a017; }
+
+  /* Two-level profile accordion */
+  .profile-player { width: 100%; }
+  .player-chip { width: 100%; box-sizing: border-box; }
+  .player-chip .pname { flex: 1; }
+  .pcaret { font-size: 11px; color: #999; margin: 0 2px; }
+  .cmd-sublist { flex-wrap: wrap; gap: 6px; padding: 6px 0 8px 18px; }
+  .cmd-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #0d0d0d; border: 1px solid #2a2a2a;
+    padding: 4px 4px 4px 8px; border-radius: 16px;
+    font-size: 12px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .cmd-chip:hover { background: #1f1f1f; border-color: #555; }
+  .cmd-chip .pcolor {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25); flex-shrink: 0;
+  }
+  .cmd-chip .pcolor[data-color="red"]    { background: #c92929; }
+  .cmd-chip .pcolor[data-color="blue"]   { background: #2563eb; }
+  .cmd-chip .pcolor[data-color="green"]  { background: #16a34a; }
+  .cmd-chip .pcolor[data-color="white"]  { background: #fafafa; }
+  .cmd-chip .pcolor[data-color="black"]  { background: #404040; }
+  .cmd-chip .pcolor[data-color="purple"] { background: #9333ea; }
+  .cmd-chip .pcolor[data-color="orange"] { background: #ea580c; }
+  .cmd-chip .pcolor[data-color="teal"]   { background: #0d9488; }
+  .cmd-chip .pcolor[data-color="pink"]   { background: #db2777; }
+  .cmd-chip .pcolor[data-color="gold"]   { background: #ca8a04; }
+  .cmd-chip .pname { font-weight: 600; }
+
+  @media (max-width: 600px) {
+    .toolbar { padding: 0 8px; }
+    .tb-btn { padding: 5px 8px; font-size: 12px; }
+    .tb-title { display: none; }
+    .life-display { font-size: clamp(48px, 16vw, 110px); }
+    .p-name { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-left">
+    <span class="tb-title">⚔️ MTG Life Counter</span>
+  </div>
+  <div class="toolbar-right">
+    <button class="tb-btn" id="btnRoll">🎲 Roll</button>
+    <button class="tb-btn" id="btnLeaderboard">🏆 Wins</button>
+    <button class="tb-btn" id="btnNewGame">↻ New Game</button>
+    <button class="tb-btn" id="btnSettings">⚙️ Game Settings</button>
+    <button class="tb-btn" id="btnInstall" style="display:none;">⬇️ Install App</button>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<!-- Player settings modal -->
+<div class="modal-backdrop" id="playerModal">
+  <div class="modal">
+    <h2 id="playerModalTitle">Player Settings</h2>
+
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="pmName" maxlength="20">
+    </div>
+
+    <h3>Saved Profiles</h3>
+    <div class="field">
+      <div class="profile-list" id="pmProfileList"></div>
+      <div class="profile-actions">
+        <button class="btn-small primary" id="pmSaveProfile">💾 Save Current as Profile</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Color</label>
+      <div class="color-swatches" id="pmSwatches"></div>
+    </div>
+
+    <div class="field">
+      <label>Orientation (which way the tile faces)</label>
+      <div class="seg" id="pmRotation">
+        <button data-rot="0"   title="Facing up"><span class="rot-icon">⬆️</span></button>
+        <button data-rot="90"  title="Facing right"><span class="rot-icon">➡️</span></button>
+        <button data-rot="180" title="Facing down"><span class="rot-icon">⬇️</span></button>
+        <button data-rot="270" title="Facing left"><span class="rot-icon">⬅️</span></button>
+      </div>
+    </div>
+
+    <div id="pmCommanderSetup">
+      <h3>Commanders</h3>
+      <div class="field" style="margin-bottom: 12px;">
+        <div class="seg" id="pmCmdCount">
+          <button data-cc="1">1 Commander</button>
+          <button data-cc="2">2 Commanders (Partner)</button>
+        </div>
+      </div>
+
+      <div id="pmCmdNames"></div>
+
+      <h3>Commander Tax</h3>
+      <div id="pmTaxList"></div>
+    </div>
+
+    <h3>Counters</h3>
+    <div class="counter-toggles" id="pmCounters"></div>
+
+    <div id="pmCommanderSection">
+      <h3>Commander Damage Received</h3>
+      <div id="pmCmdList"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary btn-danger" id="pmReset">Reset Life</button>
+      <button class="btn-secondary" id="pmClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Game settings modal -->
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal">
+    <h2>Game Settings</h2>
+
+    <div class="field">
+      <label>Format</label>
+      <select id="setFormat">
+        <option value="commander" selected>Commander</option>
+        <option value="twoheaded">Two-Headed Giant</option>
+        <option value="standard">Standard / Legacy</option>
+        <option value="brawl">Brawl</option>
+        <option value="pauper">Pauper</option>
+      </select>
+      <div id="setFormatNote" style="color:#999; font-size:12px; margin-top:6px; line-height:1.4;"></div>
+    </div>
+
+    <div class="field">
+      <label id="setCountLabel">Number of Players</label>
+      <select id="setPlayerCount">
+        <option value="2">2 Players</option>
+        <option value="3">3 Players</option>
+        <option value="4" selected>4 Players</option>
+        <option value="5">5 Players</option>
+        <option value="6">6 Players</option>
+      </select>
+    </div>
+
+    <h3>Default Counters Shown</h3>
+    <div class="counter-toggles" id="setCounters"></div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" id="setCancel">Cancel</button>
+      <button class="btn-primary" id="setApply">Apply & New Game</button>
+    </div>
+
+    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v6.2.7</div>
+  </div>
+</div>
+
+<!-- Install instructions modal (iPhone/iPad) -->
+<div class="modal-backdrop" id="installModal">
+  <div class="modal" style="max-width:380px;">
+    <h2>📲 Add to Home Screen</h2>
+    <p style="color:#bbb; font-size:14px; line-height:1.5; margin-bottom:14px;">
+      On iPhone or iPad, open this page in <strong>Safari</strong>, then:
+    </p>
+    <ol style="color:#ddd; font-size:14px; line-height:1.8; padding-left:20px; margin-bottom:4px;">
+      <li>Tap the <strong>Share</strong> button (the square with an up-arrow).</li>
+      <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+      <li>Tap <strong>Add</strong>. The app icon appears on your home screen.</li>
+    </ol>
+    <div class="modal-actions">
+      <button class="btn-primary" id="installModalClose">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- High Roll modal -->
+<div class="modal-backdrop" id="rollModal">
+  <div class="modal roll-modal">
+    <div class="roll-header">
+      <h2>🎲 High Roll — Who Goes First?</h2>
+      <div class="roll-die-select" id="rollDieSelect">
+        <button data-sides="6">d6</button>
+        <button data-sides="10">d10</button>
+        <button data-sides="20" class="active">d20</button>
+        <button data-sides="100">d100</button>
+      </div>
+      <div class="roll-status" id="rollStatus">Tap Roll to determine first player</div>
+    </div>
+    <div class="roll-list" id="rollList"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="rollClose">Close</button>
+      <button class="btn-primary" id="rollGo">🎲 Roll</button>
+    </div>
+  </div>
+</div>
+
+<!-- Win leaderboard modal -->
+<div class="modal-backdrop" id="leaderboardModal">
+  <div class="modal">
+    <h2>🏆 Win Leaderboard</h2>
+    <p style="color:#bbb; font-size:13px; margin-bottom:14px;">Wins are tracked per saved profile. Win a game with a player whose name matches a saved profile and it counts here.</p>
+    <div id="lbList"></div>
+    <p style="color:#777; font-size:12px; margin:14px 0 0; line-height:1.4;">
+      Export saves all your players, commanders & wins to a file. Import merges that file into this device — safe to run more than once (it never double-counts wins).
+    </p>
+    <div class="modal-actions" style="flex-wrap: wrap;">
+      <button class="btn-secondary btn-danger" id="lbReset">Reset Wins</button>
+      <button class="btn-secondary" id="lbExport">⬇️ Export Profiles</button>
+      <button class="btn-secondary" id="lbImport">⬆️ Import Profiles</button>
+      <button class="btn-secondary" id="lbClose">Close</button>
+    </div>
+    <input type="file" id="importFileInput" accept="application/json,.json" style="display:none">
+  </div>
+</div>
+
+<!-- New game confirm -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal">
+    <h2>Start New Game?</h2>
+    <p style="color:#bbb; font-size:14px; margin-bottom:16px;">Choose how to start the next game:</p>
+    <ul style="color:#aaa; font-size:13px; margin: 0 0 16px 18px; line-height: 1.6;">
+      <li><b style="color:#ddd;">Continue with Current Profiles</b> — keeps names, colors, and commanders. Only life totals and counters reset.</li>
+      <li><b style="color:#ddd;">Fresh New Game</b> — also clears player names, colors, and commander setups (your saved profiles are kept). Table orientations stay the same.</li>
+    </ul>
+    <div class="modal-actions" style="flex-wrap: wrap;">
+      <button class="btn-secondary" id="confirmCancel">Cancel</button>
+      <button class="btn-secondary" id="confirmFresh">↻ Fresh New Game</button>
+      <button class="btn-primary" id="confirmYes">Continue with Current Profiles</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const COUNTER_DEFS = [
+  { key: 'poison', label: '☠️ Poison',     icon: '☠️', cls: 'poison', danger: 10 },
+  { key: 'energy', label: '⚡ Energy',     icon: '⚡', cls: 'energy' },
+  { key: 'exp',    label: '✦ Experience', icon: '✦',  cls: 'exp' },
+];
+
+const COLORS = ['red','blue','green','white','black','purple','orange','teal','pink','gold'];
+const DEFAULT_NAMES = ['Player 1','Player 2','Player 3','Player 4','Player 5','Player 6'];
+
+// ===== Formats =====
+// Each format defines the starting life, whether commanders are tracked, the
+// commander-damage lethal threshold, and whether players are grouped into teams
+// (Two-Headed Giant). Commander-less formats still log wins on the leaderboard —
+// they just use the format label in place of a commander name.
+const FORMAT_DEFS = [
+  { key: 'commander', label: 'Commander',         life: 40, commander: true,  cmdLethal: 21, teams: false },
+  { key: 'twoheaded', label: 'Two-Headed Giant',  life: 60, commander: true,  cmdLethal: 31, teams: true  },
+  { key: 'standard',  label: 'Standard / Legacy', life: 20, commander: false, cmdLethal: 21, teams: false },
+  { key: 'brawl',     label: 'Brawl',             life: 25, commander: true,  cmdLethal: 21, teams: false },
+  { key: 'pauper',    label: 'Pauper',            life: 20, commander: false, cmdLethal: 21, teams: false },
+];
+
+const state = {
+  playerCount: 4,
+  format: 'commander',
+  startLife: 40,
+  defaultCounters: { poison: true, energy: false, exp: false },
+  players: [],
+  activeModalPlayer: null,
+  winCredited: null, // name of the profile already credited a win this game (guard against double-counting)
+};
+
+function formatDef() {
+  return FORMAT_DEFS.find(f => f.key === state.format) || FORMAT_DEFS[0];
+}
+function formatHasCommander() { return formatDef().commander; }
+function isTwoHeaded()        { return !!formatDef().teams; }
+function cmdLethal()          { return formatDef().cmdLethal; }
+
+// In Two-Headed Giant players are paired into teams of two by their grid order:
+// [0,1] = Team 1, [2,3] = Team 2, etc. Every other format is free-for-all
+// (each player is their own team).
+function teamOf(idx) {
+  return isTwoHeaded() ? Math.floor(idx / 2) : idx;
+}
+function getTeams() {
+  const teams = {};
+  state.players.forEach((_, i) => {
+    const t = teamOf(i);
+    (teams[t] = teams[t] || []).push(i);
+  });
+  return Object.keys(teams).map(k => teams[k]);
+}
+function sameTeam(a, b) {
+  return teamOf(a) === teamOf(b);
+}
+function teammatesOf(idx) {
+  return state.players.map((_, i) => i).filter(i => i !== idx && sameTeam(i, idx));
+}
+function teamLabelOf(idx) {
+  return 'Team ' + (teamOf(idx) + 1);
+}
+
+// For win crediting: returns the commander name(s)/count to log for a winning
+// player. Commander formats use the player's real commanders; commander-less
+// formats fall back to the format label as a synthetic single "commander".
+function winCmdInfo(p) {
+  if (formatHasCommander()) {
+    return { names: p.commanderNames, count: p.commanderCount };
+  }
+  return { names: [formatDef().label, 'Partner'], count: 1 };
+}
+
+function defaultPlayer(i) {
+  return {
+    name: DEFAULT_NAMES[i],
+    color: COLORS[i % COLORS.length],
+    rotation: 0,
+    life: state.startLife,
+    lastDelta: 0,
+    deltaTimer: null,
+    counters: { ...state.defaultCounters },
+    counterValues: { poison: 0, energy: 0, exp: 0 },
+    commanderCount: 1,
+    commanderNames: ['Commander', 'Partner'],
+    commanderTax: [0, 0],
+    // commanderDmg[opponentIdx] = [dmgFromTheirCmd1, dmgFromTheirCmd2]
+    commanderDmg: {},
+    showCommander: formatHasCommander(),
+  };
+}
+
+function initPlayers() {
+  state.winCredited = null;
+  state.players = [];
+  for (let i = 0; i < state.playerCount; i++) state.players.push(defaultPlayer(i));
+  for (let i = 0; i < state.players.length; i++) {
+    for (let j = 0; j < state.players.length; j++) {
+      if (i !== j) state.players[i].commanderDmg[j] = [0, 0];
+    }
+  }
+}
+
+function ensureDmgShape(p) {
+  // Migrate any old number values to [n, 0]
+  Object.keys(p.commanderDmg).forEach(k => {
+    const v = p.commanderDmg[k];
+    if (typeof v === 'number') p.commanderDmg[k] = [v, 0];
+    else if (!Array.isArray(v)) p.commanderDmg[k] = [0, 0];
+    else if (v.length < 2) while (p.commanderDmg[k].length < 2) p.commanderDmg[k].push(0);
+  });
+  for (let j = 0; j < state.players.length; j++) {
+    const idx = state.players.indexOf(p);
+    if (j !== idx && !p.commanderDmg[j]) p.commanderDmg[j] = [0, 0];
+  }
+}
+
+function save() {
+  try {
+    localStorage.setItem('mtg-life-state', JSON.stringify({
+      playerCount: state.playerCount,
+      format: state.format,
+      startLife: state.startLife,
+      defaultCounters: state.defaultCounters,
+      winCredited: state.winCredited,
+      players: state.players.map(p => ({
+        name: p.name, color: p.color, rotation: p.rotation, life: p.life,
+        counters: p.counters, counterValues: p.counterValues,
+        commanderCount: p.commanderCount, commanderNames: p.commanderNames,
+        commanderTax: p.commanderTax,
+        commanderDmg: p.commanderDmg, showCommander: p.showCommander,
+      })),
+    }));
+  } catch(e) {}
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem('mtg-life-state');
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    state.playerCount = s.playerCount || 4;
+    state.format = (s.format && FORMAT_DEFS.some(f => f.key === s.format)) ? s.format : 'commander';
+    state.startLife = s.startLife || formatDef().life;
+    state.winCredited = s.winCredited || null;
+    state.defaultCounters = { poison: true, energy: false, exp: false, ...(s.defaultCounters || {}) };
+    // Drop any legacy keys
+    delete state.defaultCounters.storm;
+    delete state.defaultCounters.plus1;
+
+    state.players = (s.players || []).map((p, i) => ({
+      name: p.name || DEFAULT_NAMES[i],
+      color: p.color || COLORS[i % COLORS.length],
+      rotation: typeof p.rotation === 'number' ? p.rotation : 0,
+      life: typeof p.life === 'number' ? p.life : state.startLife,
+      lastDelta: 0, deltaTimer: null,
+      counters: { poison: true, energy: false, exp: false, ...(p.counters || {}) },
+      counterValues: { poison: 0, energy: 0, exp: 0, ...(p.counterValues || {}) },
+      commanderCount: p.commanderCount || 1,
+      commanderNames: p.commanderNames || ['Commander', 'Partner'],
+      commanderTax: Array.isArray(p.commanderTax) ? p.commanderTax.slice(0,2).concat([0,0]).slice(0,2) : [0, 0],
+      commanderDmg: p.commanderDmg || {},
+      showCommander: p.showCommander !== false,
+    }));
+
+    if (state.players.length !== state.playerCount) {
+      initPlayers();
+    } else {
+      state.players.forEach(p => {
+        // Strip legacy counters
+        delete p.counters.storm;
+        delete p.counters.plus1;
+        delete p.counterValues.storm;
+        delete p.counterValues.plus1;
+        ensureDmgShape(p);
+      });
+    }
+    return true;
+  } catch(e) { return false; }
+}
+
+// A player is defeated if life hits 0, poison reaches 10, OR any single
+// opponent's commander has dealt 21+ damage to them (MTG commander rule).
+function isPlayerDead(p) {
+  if (p.life <= 0) return true;
+  if (p.counters.poison && p.counterValues.poison >= 10) return true;
+  if (p.commanderDmg) {
+    for (const k in p.commanderDmg) {
+      const arr = p.commanderDmg[k];
+      if (Array.isArray(arr) && arr.some(v => (v || 0) >= cmdLethal())) return true;
+    }
+  }
+  return false;
+}
+
+function render() {
+  const grid = document.getElementById('grid');
+
+  // Determine if the game has a winner. Works for both free-for-all (each player
+  // is their own team) and Two-Headed Giant (players paired into teams): a team
+  // is out when ANY of its members is dead, and there's a winner when exactly one
+  // team is still standing while at least one other has been knocked out.
+  const teams = getTeams();
+  // In Two-Headed Giant we draw ONE combined tile per team; every other format
+  // draws one tile per player.
+  const tileCount = isTwoHeaded() ? teams.length : state.playerCount;
+  grid.className = 'grid p' + tileCount;
+  grid.innerHTML = '';
+
+  const teamDead = teams.map(team => team.some(i => isPlayerDead(state.players[i])));
+  const aliveTeamIdx = teams.map((_, t) => t).filter(t => !teamDead[t]);
+  const hasWinner = teams.length >= 2 && aliveTeamIdx.length === 1 && teamDead.some(d => d);
+  const winnerTeamIdx = hasWinner ? aliveTeamIdx[0] : -1;
+  const winnerIndices = hasWinner ? teams[winnerTeamIdx] : [];
+  const winnerIdxSet = new Set(winnerIndices);
+  const deadFlag = state.players.map((_, i) => teamDead[teamOf(i)]);
+
+  // Credit a win — once per game. In 2HG both teammates get credited; for
+  // commander-less formats winCmdInfo() supplies the format name as the commander.
+  if (hasWinner && !state.winCredited) {
+    state.winCredited = winnerIndices.map(i => state.players[i].name || '(unnamed)').join(' & ') || '(unnamed)';
+    winnerIndices.forEach(i => {
+      const winP = state.players[i];
+      const info = winCmdInfo(winP);
+      creditProfileWin(winP.name || '', info.names, info.count);
+    });
+    save();
+    const lb = document.getElementById('leaderboardModal');
+    if (lb && lb.classList.contains('active')) renderLeaderboard();
+  }
+
+  // ===== Two-Headed Giant: one combined tile per team =====
+  // The two teammates share a single life total, so the tile is keyed to the
+  // first member (m0) for life controls; applyLifeChange() mirrors the value to
+  // the teammate. Inside the tile, each player keeps their OWN column with name,
+  // settings menu, and counters (commander damage tracked per-commander to 31,
+  // tax, poison/energy/exp) — so the per-player data model is fully preserved.
+  if (isTwoHeaded()) {
+    teams.forEach((members, t) => {
+      const m0 = members[0];
+      const p0 = state.players[m0];
+      const tile = document.createElement('div');
+      tile.className = 'player team-tile'
+        + (teamDead[t] ? ' dead' : '')
+        + (t === winnerTeamIdx ? ' winner' : '');
+      tile.dataset.color = p0.color;
+      tile.dataset.idx = m0;
+      tile.dataset.rotation = p0.rotation || 0;
+
+      const cols = members.map(mi => {
+        const pp = state.players[mi];
+        return `<div class="tc-col" data-color="${pp.color}">
+          <div class="tc-col-head">
+            <span class="roll-swatch" data-color="${pp.color}"></span>
+            <input class="p-name" value="${escapeHtml(pp.name)}" data-idx="${mi}">
+            <button class="p-menu-btn" data-action="menu" data-idx="${mi}" title="Player settings">⋯</button>
+          </div>
+          <div class="counters">${renderCounters(pp, mi)}</div>
+        </div>`;
+      }).join('');
+
+      tile.innerHTML = `
+        <button class="rotation-badge" data-action="rotate" data-idx="${m0}" title="Rotate tile">⟳</button>
+        <div class="team-badge">${escapeHtml(teamLabelOf(m0))}</div>
+        <div class="p-content">
+          <div class="life-area">
+            <button class="life-btn minus" data-action="life" data-delta="-1" data-idx="${m0}">−</button>
+            <div class="life-display" data-action="editlife" data-idx="${m0}" title="Shared team life — tap to set (or type -15 for big damage)">${p0.life}</div>
+            <div class="life-delta ${p0.lastDelta > 0 ? 'positive' : 'negative'} ${p0.lastDelta ? 'show' : ''}" data-deltabox="${m0}">
+              ${p0.lastDelta > 0 ? '+' : ''}${p0.lastDelta || ''}
+            </div>
+            <button class="life-btn plus" data-action="life" data-delta="1" data-idx="${m0}">+</button>
+          </div>
+          <div class="team-cols">${cols}</div>
+        </div>
+      `;
+      grid.appendChild(tile);
+    });
+    bindGridEvents();
+    syncRotationDims();
+    return;
+  }
+
+  // ===== Free-for-all: one tile per player =====
+  state.players.forEach((p, idx) => {
+    const tile = document.createElement('div');
+    const isDead = deadFlag[idx];
+    const isWinner = winnerIdxSet.has(idx);
+    tile.className = 'player' + (isDead ? ' dead' : '') + (isWinner ? ' winner' : '');
+    tile.dataset.color = p.color;
+    tile.dataset.idx = idx;
+    tile.dataset.rotation = p.rotation || 0;
+
+    tile.innerHTML = `
+      <button class="rotation-badge" data-action="rotate" data-idx="${idx}" title="Rotate tile">⟳</button>
+      <div class="p-content">
+        <div class="p-header">
+          <input class="p-name" value="${escapeHtml(p.name)}" data-idx="${idx}">
+          <button class="p-menu-btn" data-action="menu" data-idx="${idx}" title="Player settings">⋯</button>
+        </div>
+        <div class="life-area">
+          <button class="life-btn minus" data-action="life" data-delta="-1" data-idx="${idx}">−</button>
+          <div class="life-display" data-action="editlife" data-idx="${idx}" title="Tap to set life total (or type -15 for big damage)">${p.life}</div>
+          <div class="life-delta ${p.lastDelta > 0 ? 'positive' : 'negative'} ${p.lastDelta ? 'show' : ''}" data-deltabox="${idx}">
+            ${p.lastDelta > 0 ? '+' : ''}${p.lastDelta || ''}
+          </div>
+          <button class="life-btn plus" data-action="life" data-delta="1" data-idx="${idx}">+</button>
+        </div>
+        <div class="counters">
+          ${renderCounters(p, idx)}
+        </div>
+      </div>
+    `;
+    grid.appendChild(tile);
+  });
+
+  bindGridEvents();
+  syncRotationDims();
+}
+
+function renderCounters(p, idx) {
+  let html = '';
+
+  // Commander damage bubbles — one per opponent commander
+  if (p.showCommander && formatHasCommander()) {
+    state.players.forEach((other, oi) => {
+      if (oi === idx) return;
+      // In Two-Headed Giant your teammate can't deal commander damage to you.
+      if (isTwoHeaded() && sameTeam(idx, oi)) return;
+      const arr = Array.isArray(p.commanderDmg[oi]) ? p.commanderDmg[oi] : [0, 0];
+      for (let ci = 0; ci < (other.commanderCount || 1); ci++) {
+        const val = arr[ci] || 0;
+        const isDanger = val >= cmdLethal();
+        const fullName = other.name || '';
+        const rawCmdName = (other.commanderNames && other.commanderNames[ci]) ? other.commanderNames[ci].trim() : '';
+        const isPlaceholder = rawCmdName === '' || rawCmdName === 'Commander' || rawCmdName === 'Partner';
+        // Prefer the actual commander name on the bubble; fall back to player name
+        let subLabel;
+        if (!isPlaceholder) {
+          subLabel = rawCmdName;
+        } else if ((other.commanderCount || 1) > 1) {
+          subLabel = `${fullName} ${ci+1}`;
+        } else {
+          subLabel = fullName;
+        }
+        const cmdLabel = !isPlaceholder ? rawCmdName : `Commander ${ci+1}`;
+        html += `<div class="counter commander ${isDanger ? 'danger' : ''}" data-cmddmg-idx="${idx}" data-oi="${oi}" data-ci="${ci}" title="Damage from ${escapeHtml(cmdLabel)} (${escapeHtml(other.name)})">
+          <button class="cnt-btn" data-cmddmg-act="dec">−</button>
+          <span class="icon">👑</span>
+          <span class="val">${val}</span>
+          <span class="label-sub">${escapeHtml(subLabel)}</span>
+          <button class="cnt-btn" data-cmddmg-act="inc">+</button>
+        </div>`;
+      }
+    });
+  }
+
+  // Commander tax chip(s) — only in formats that use commanders
+  if (formatHasCommander())
+  for (let ci = 0; ci < p.commanderCount; ci++) {
+    const tax = p.commanderTax[ci] || 0;
+    const rawName = (p.commanderNames && p.commanderNames[ci]) ? p.commanderNames[ci].trim() : '';
+    const isPlaceholder = rawName === '' || rawName === 'Commander' || rawName === 'Partner';
+    let subText;
+    if (!isPlaceholder) subText = rawName;
+    else if (p.commanderCount > 1) subText = String(ci + 1);
+    else subText = '';
+    const sub = subText ? `<span class="label-sub">${escapeHtml(subText)}</span>` : '';
+    const tipName = !isPlaceholder ? rawName : `Commander ${ci+1}`;
+    html += `<div class="counter tax" data-tax-idx="${idx}" data-ci="${ci}" title="${escapeHtml(tipName)} tax (±2)">
+      <button class="cnt-btn" data-tax-act="dec">−</button>
+      <span class="icon">💰</span>
+      <span class="val">${tax}</span>${sub}
+      <button class="cnt-btn" data-tax-act="inc">+</button>
+    </div>`;
+  }
+
+  // Standard counters
+  COUNTER_DEFS.forEach(def => {
+    if (!p.counters[def.key]) return;
+    const v = p.counterValues[def.key] || 0;
+    const danger = def.danger && v >= def.danger;
+    html += `<div class="counter ${def.cls} ${danger ? 'danger' : ''}" data-cnt-idx="${idx}" data-counter="${def.key}" title="${def.label}">
+      <button class="cnt-btn" data-cnt-act="dec">−</button>
+      <span class="icon">${def.icon}</span>
+      <span class="val">${v}</span>
+      <button class="cnt-btn" data-cnt-act="inc">+</button>
+    </div>`;
+  });
+  return html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let resizeObs = null;
+function syncRotationDims() {
+  // Set CSS vars so 90/270-rotated content can swap dimensions correctly
+  if (!resizeObs) {
+    resizeObs = new ResizeObserver(entries => {
+      entries.forEach(e => {
+        const tile = e.target;
+        tile.style.setProperty('--tile-w', e.contentRect.width + 'px');
+        tile.style.setProperty('--tile-h', e.contentRect.height + 'px');
+      });
+    });
+  } else {
+    resizeObs.disconnect();
+  }
+  document.querySelectorAll('.player').forEach(t => resizeObs.observe(t));
+}
+
+// Global life-button hold tracker. Lives outside the per-button closure so
+// that document-level release events still fire even after render() replaces
+// the original button in the DOM (which was the cause of the stuck-counter bug).
+//
+// We use Pointer Events with pointer capture rather than mouse/touch events.
+// Capturing the pointer guarantees a matching pointerup is delivered for every
+// pointerdown — even if the finger drifts off the button or the tile re-renders
+// — which is what was letting the repeat interval get "stuck" running.
+let activeLifeHold = null;
+function startLifeHold(btn, e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return; // ignore right/middle mouse
+  e.preventDefault();
+  endLifeHold(false); // safety: clear any previous hold
+  const delta = parseInt(btn.dataset.delta);
+  const idx = parseInt(btn.dataset.idx);
+  if (isNaN(delta) || isNaN(idx)) return;
+  // Capture so this exact pointer's release always comes back to us.
+  try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+  const hold = { delta, idx, btn, pointerId: e.pointerId, didHold: false, holdTimer: null, holdInterval: null };
+  activeLifeHold = hold;
+  hold.holdTimer = setTimeout(() => {
+    hold.didHold = true;
+    hold.holdInterval = setInterval(() => {
+      // Update the value in place during a hold. We deliberately avoid a full
+      // render() here: re-rendering would detach the button under the user's
+      // finger. The guard below also self-heals — if this hold was superseded
+      // (e.g. another player pressed a different tile), the orphaned interval
+      // clears itself instead of running forever.
+      if (activeLifeHold === hold) {
+        applyLifeChange(hold.idx, hold.delta);
+        updateLifeDisplay(hold.idx);
+      } else {
+        clearInterval(hold.holdInterval);
+      }
+    }, 80);
+  }, 400);
+}
+function endLifeHold(applyTap) {
+  const hold = activeLifeHold;
+  if (!hold) return;
+  activeLifeHold = null;
+  clearTimeout(hold.holdTimer);
+  clearInterval(hold.holdInterval);
+  if (hold.btn) { try { hold.btn.releasePointerCapture(hold.pointerId); } catch (_) {} }
+  if (applyTap && !hold.didHold) {
+    applyLifeChange(hold.idx, hold.delta);
+  }
+  // One full render when the interaction ends — covers both a tap and the
+  // release after a hold, and keeps the button alive for the whole hold.
+  render(); save();
+}
+// Bind once at document level — survives re-renders. With pointer capture the
+// button's pointerup also bubbles here, so these are the reliable release path;
+// the extras (blur / tab hidden) are belt-and-suspenders against a missed up.
+document.addEventListener('pointerup', () => endLifeHold(true));
+document.addEventListener('pointercancel', () => endLifeHold(false));
+window.addEventListener('blur', () => endLifeHold(false));
+document.addEventListener('visibilitychange', () => { if (document.hidden) endLifeHold(false); });
+
+function bindGridEvents() {
+  document.querySelectorAll('.life-btn').forEach(btn => {
+    btn.addEventListener('pointerdown', (e) => startLifeHold(btn, e));
+    // Direct release path on the captured element, in addition to the document
+    // listener — whichever fires first ends the hold; the other is a no-op.
+    btn.addEventListener('pointerup', () => endLifeHold(true));
+    btn.addEventListener('pointercancel', () => endLifeHold(false));
+    btn.addEventListener('lostpointercapture', () => endLifeHold(false));
+  });
+
+  // Tap the life total to type a new number directly (handy for big damage)
+  document.querySelectorAll('.life-display').forEach(disp => {
+    disp.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editLife(parseInt(disp.dataset.idx));
+    });
+  });
+
+  document.querySelectorAll('.p-menu-btn').forEach(btn => {
+    btn.addEventListener('click', () => openPlayerModal(parseInt(btn.dataset.idx)));
+  });
+
+  document.querySelectorAll('.rotation-badge').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.idx);
+      const p = state.players[idx];
+      p.rotation = (p.rotation + 90) % 360;
+      // In 2HG the combined tile is keyed to one teammate — keep the other's
+      // rotation in sync so the whole team tile turns together.
+      if (isTwoHeaded()) teammatesOf(idx).forEach(ti => { state.players[ti].rotation = p.rotation; });
+      render(); save();
+    });
+  });
+
+  // Commander damage bubbles: inline +/- buttons
+  document.querySelectorAll('.counter.commander[data-cmddmg-idx]').forEach(el => {
+    const idx = parseInt(el.dataset.cmddmgIdx);
+    const oi = parseInt(el.dataset.oi);
+    const ci = parseInt(el.dataset.ci);
+    el.querySelectorAll('.cnt-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const d = btn.dataset.cmddmgAct === 'inc' ? 1 : -1;
+        changeCommanderDmg(idx, oi, ci, d);
+      });
+    });
+    // Right-click on the chip background still opens settings for fine control
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openPlayerModal(idx);
+    });
+  });
+
+  // Commander tax: inline +/- buttons (±2)
+  document.querySelectorAll('.counter.tax[data-tax-idx]').forEach(el => {
+    const idx = parseInt(el.dataset.taxIdx);
+    const ci = parseInt(el.dataset.ci);
+    el.querySelectorAll('.cnt-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const d = btn.dataset.taxAct === 'inc' ? 2 : -2;
+        changeTax(idx, ci, d);
+      });
+    });
+  });
+
+  // Standard counters: inline +/- buttons
+  document.querySelectorAll('.counter[data-counter]').forEach(el => {
+    const idx = parseInt(el.dataset.cntIdx);
+    const key = el.dataset.counter;
+    el.querySelectorAll('.cnt-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const d = btn.dataset.cntAct === 'inc' ? 1 : -1;
+        changeCounter(idx, key, d);
+      });
+    });
+  });
+
+  document.querySelectorAll('.p-name').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const idx = parseInt(inp.dataset.idx);
+      state.players[idx].name = inp.value.trim() || DEFAULT_NAMES[idx];
+      save();
+      render();
+    });
+    inp.addEventListener('blur', () => {
+      inp.value = state.players[parseInt(inp.dataset.idx)].name;
+    });
+  });
+}
+
+// Mutate life state only — no DOM rebuild. Safe to call rapidly during a hold.
+function applyLifeChange(idx, delta) {
+  const p = state.players[idx];
+  p.life += delta;
+  p.lastDelta = (p.lastDelta || 0) + delta;
+  if (p.deltaTimer) clearTimeout(p.deltaTimer);
+  p.deltaTimer = setTimeout(() => { p.lastDelta = 0; render(); save(); }, 1500);
+  // Two-Headed Giant teams share one life total — mirror the change to teammates.
+  if (isTwoHeaded()) {
+    teammatesOf(idx).forEach(ti => {
+      const t = state.players[ti];
+      t.life = p.life;
+      t.lastDelta = p.lastDelta;
+      if (t.deltaTimer) clearTimeout(t.deltaTimer);
+      t.deltaTimer = setTimeout(() => { t.lastDelta = 0; render(); save(); }, 1500);
+    });
+  }
+}
+
+// Patch just one tile's number + delta indicator without re-rendering the grid.
+function updateLifeDisplay(idx) {
+  // In 2HG the teammate's tile mirrors the same shared life, so patch both.
+  const indices = isTwoHeaded() ? [idx, ...teammatesOf(idx)] : [idx];
+  indices.forEach(i => {
+    const p = state.players[i];
+    const tile = document.querySelector(`.player[data-idx="${i}"]`);
+    if (!tile) return;
+    const disp = tile.querySelector('.life-display');
+    if (disp) disp.textContent = p.life;
+    const deltaBox = tile.querySelector('.life-delta');
+    if (deltaBox) {
+      deltaBox.classList.toggle('positive', p.lastDelta > 0);
+      deltaBox.classList.toggle('negative', p.lastDelta < 0);
+      deltaBox.classList.toggle('show', !!p.lastDelta);
+      deltaBox.textContent = (p.lastDelta > 0 ? '+' : '') + (p.lastDelta || '');
+    }
+  });
+}
+
+function changeLife(idx, delta) {
+  applyLifeChange(idx, delta);
+  render(); save();
+}
+
+// Tap-to-edit the life total. Type a plain number to set the total directly
+// (e.g. "25"), or a signed number to adjust it (e.g. "-15" for a 15 damage hit,
+// "+8" to gain 8).
+function editLife(idx) {
+  const p = state.players[idx];
+  const raw = prompt('Set life total — or type -N / +N to adjust (e.g. -15 for big damage):', p.life);
+  if (raw === null) return; // cancelled
+  const s = String(raw).trim();
+  if (s === '') return;
+  let delta;
+  if (/^[+-]\d+$/.test(s)) {
+    delta = parseInt(s, 10);            // relative adjustment
+  } else if (/^\d+$/.test(s)) {
+    delta = parseInt(s, 10) - p.life;   // absolute total -> derive the delta
+  } else {
+    return; // not a number, ignore
+  }
+  if (delta === 0) return;
+  applyLifeChange(idx, delta);
+  render(); save();
+}
+
+function changeCounter(idx, key, delta) {
+  const p = state.players[idx];
+  p.counterValues[key] = Math.max(0, (p.counterValues[key] || 0) + delta);
+  render(); save();
+}
+
+function changeTax(idx, ci, delta) {
+  const p = state.players[idx];
+  p.commanderTax[ci] = Math.max(0, (p.commanderTax[ci] || 0) + delta);
+  render(); save();
+}
+
+function changeCommanderDmg(targetIdx, fromIdx, cmdSlot, delta) {
+  const p = state.players[targetIdx];
+  if (!Array.isArray(p.commanderDmg[fromIdx])) p.commanderDmg[fromIdx] = [0, 0];
+  const before = p.commanderDmg[fromIdx][cmdSlot] || 0;
+  const after = Math.max(0, before + delta);
+  const realDelta = after - before;
+  p.commanderDmg[fromIdx][cmdSlot] = after;
+  // Commander damage also reduces life
+  if (realDelta !== 0) {
+    p.life -= realDelta;
+    // Two-Headed Giant teams share one life total — mirror the reduction so the
+    // whole team's pool drops, not just the player who took the hit.
+    if (isTwoHeaded()) {
+      teammatesOf(targetIdx).forEach(ti => { state.players[ti].life = p.life; });
+    }
+  }
+  save();
+  renderPlayerModal();
+  render();
+}
+
+/* ===== Modals ===== */
+function openPlayerModal(idx) {
+  state.activeModalPlayer = idx;
+  renderPlayerModal();
+  document.getElementById('playerModal').classList.add('active');
+}
+
+function renderPlayerModal() {
+  const idx = state.activeModalPlayer;
+  if (idx === null) return;
+  const p = state.players[idx];
+  document.getElementById('playerModalTitle').textContent =
+    isTwoHeaded() ? `${p.name} · ${teamLabelOf(idx)}` : p.name;
+  document.getElementById('pmName').value = p.name;
+
+  // Hide all commander-related controls in formats that don't use commanders
+  // (Standard / Legacy / Pauper).
+  const hasCmd = formatHasCommander();
+  const cmdSetup = document.getElementById('pmCommanderSetup');
+  if (cmdSetup) cmdSetup.style.display = hasCmd ? '' : 'none';
+
+  // Profiles
+  renderProfileList();
+  const saveBtn = document.getElementById('pmSaveProfile');
+  if (saveBtn && !saveBtn.dataset.bound) {
+    saveBtn.dataset.bound = '1';
+    saveBtn.addEventListener('click', saveCurrentAsProfile);
+  }
+
+  // Color swatches
+  const sw = document.getElementById('pmSwatches');
+  sw.innerHTML = COLORS.map(c => `<div class="swatch ${c === p.color ? 'selected' : ''}" data-color="${c}"></div>`).join('');
+  sw.querySelectorAll('.swatch').forEach(el => {
+    el.addEventListener('click', () => {
+      p.color = el.dataset.color;
+      renderPlayerModal(); render(); save();
+    });
+  });
+
+  // Rotation buttons
+  const rot = document.getElementById('pmRotation');
+  rot.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.rot) === (p.rotation || 0));
+    b.onclick = () => {
+      p.rotation = parseInt(b.dataset.rot);
+      renderPlayerModal(); render(); save();
+    };
+  });
+
+  // Commander count
+  const cc = document.getElementById('pmCmdCount');
+  cc.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.cc) === p.commanderCount);
+    b.onclick = () => {
+      p.commanderCount = parseInt(b.dataset.cc);
+      if (p.commanderCount === 1) p.commanderTax[1] = 0;
+      renderPlayerModal(); render(); save();
+    };
+  });
+
+  // Commander names
+  const cn = document.getElementById('pmCmdNames');
+  cn.innerHTML = '';
+  for (let ci = 0; ci < p.commanderCount; ci++) {
+    const field = document.createElement('div');
+    field.className = 'field';
+    field.style.marginBottom = '8px';
+    field.innerHTML = `<label>Commander ${ci+1} name (optional)</label>
+      <input type="text" maxlength="30" value="${escapeHtml(p.commanderNames[ci] || '')}" data-ci="${ci}">`;
+    field.querySelector('input').addEventListener('input', (e) => {
+      p.commanderNames[ci] = e.target.value;
+      save();
+      render();
+    });
+    cn.appendChild(field);
+  }
+
+  // Tax controls
+  const tx = document.getElementById('pmTaxList');
+  tx.innerHTML = '';
+  for (let ci = 0; ci < p.commanderCount; ci++) {
+    const label = p.commanderNames[ci] || `Commander ${ci+1}`;
+    const row = document.createElement('div');
+    row.className = 'tax-row';
+    row.innerHTML = `
+      <div class="clabel">${escapeHtml(label)} tax</div>
+      <div class="vctrl">
+        <button data-act="dec">−</button>
+        <span class="vnum">${p.commanderTax[ci] || 0}</span>
+        <button data-act="inc">+</button>
+      </div>
+    `;
+    row.querySelector('[data-act="dec"]').addEventListener('click', () => changeTax(idx, ci, -2));
+    row.querySelector('[data-act="inc"]').addEventListener('click', () => changeTax(idx, ci, 2));
+    tx.appendChild(row);
+  }
+
+  // Counter toggles
+  const ct = document.getElementById('pmCounters');
+  ct.innerHTML = (hasCmd ? `
+    <label class="ctog"><input type="checkbox" data-flag="showCommander" ${p.showCommander ? 'checked' : ''}> 👑 Commander dmg</label>
+    ` : '') + COUNTER_DEFS.map(d => `
+    <label class="ctog"><input type="checkbox" data-counter="${d.key}" ${p.counters[d.key] ? 'checked' : ''}> ${d.label}</label>
+  `).join('');
+  ct.querySelectorAll('input[data-counter]').forEach(inp => {
+    inp.addEventListener('change', () => {
+      p.counters[inp.dataset.counter] = inp.checked;
+      render(); save();
+    });
+  });
+  ct.querySelectorAll('input[data-flag]').forEach(inp => {
+    inp.addEventListener('change', () => {
+      p[inp.dataset.flag] = inp.checked;
+      document.getElementById('pmCommanderSection').style.display = (hasCmd && p.showCommander) ? '' : 'none';
+      render(); save();
+    });
+  });
+
+  // Commander damage list
+  document.getElementById('pmCommanderSection').style.display = (hasCmd && p.showCommander) ? '' : 'none';
+  const cmdList = document.getElementById('pmCmdList');
+  cmdList.innerHTML = '';
+  state.players.forEach((other, oi) => {
+    if (oi === idx) return;
+    // In Two-Headed Giant a teammate can't deal commander damage to you.
+    if (isTwoHeaded() && sameTeam(idx, oi)) return;
+    const arr = p.commanderDmg[oi] || [0, 0];
+    const block = document.createElement('div');
+    block.className = 'cmd-block';
+    let rows = `<div class="who">From ${escapeHtml(other.name)}</div>`;
+    for (let ci = 0; ci < other.commanderCount; ci++) {
+      const val = arr[ci] || 0;
+      const label = other.commanderNames[ci] || `Commander ${ci+1}`;
+      const danger = val >= cmdLethal();
+      rows += `
+        <div class="cmd-row">
+          <div class="clabel">${escapeHtml(label)} ${danger ? '⚠️' : ''}</div>
+          <div class="vctrl">
+            <button data-act="dec" data-oi="${oi}" data-ci="${ci}">−</button>
+            <span class="vnum ${danger ? 'danger' : ''}">${val}</span>
+            <button data-act="inc" data-oi="${oi}" data-ci="${ci}">+</button>
+          </div>
+        </div>
+      `;
+    }
+    block.innerHTML = rows;
+    block.querySelectorAll('button').forEach(b => {
+      const oi2 = parseInt(b.dataset.oi);
+      const ci2 = parseInt(b.dataset.ci);
+      const d = b.dataset.act === 'inc' ? 1 : -1;
+      b.addEventListener('click', () => changeCommanderDmg(idx, oi2, ci2, d));
+    });
+    cmdList.appendChild(block);
+  });
+
+  document.getElementById('pmName').oninput = (e) => {
+    p.name = e.target.value.trim() || DEFAULT_NAMES[idx];
+    document.getElementById('playerModalTitle').textContent =
+      isTwoHeaded() ? `${p.name} · ${teamLabelOf(idx)}` : p.name;
+    render(); save();
+  };
+}
+
+document.getElementById('pmClose').addEventListener('click', () => {
+  document.getElementById('playerModal').classList.remove('active');
+  state.activeModalPlayer = null;
+});
+document.getElementById('pmReset').addEventListener('click', () => {
+  const p = state.players[state.activeModalPlayer];
+  p.life = state.startLife;
+  // Two-Headed Giant teams share one life total — mirror the reset to teammates.
+  if (isTwoHeaded()) teammatesOf(state.activeModalPlayer).forEach(ti => { state.players[ti].life = state.startLife; });
+  Object.keys(p.counterValues).forEach(k => p.counterValues[k] = 0);
+  Object.keys(p.commanderDmg).forEach(k => p.commanderDmg[k] = [0, 0]);
+  p.commanderTax = [0, 0];
+  render(); save(); renderPlayerModal();
+});
+
+/* Settings modal */
+// Reads the dropdown's currently-selected format (NOT state.format) so the note
+// previews the pending choice without committing it until Apply is pressed.
+function updateFormatNote() {
+  const note = document.getElementById('setFormatNote');
+  if (!note) return;
+  const key = document.getElementById('setFormat').value;
+  const f = FORMAT_DEFS.find(x => x.key === key) || FORMAT_DEFS[0];
+  const bits = ['Starting life ' + f.life];
+  bits.push(f.commander ? ('commander damage lethal at ' + f.cmdLethal) : 'no commander tracking');
+  if (f.teams) bits.push('players paired into teams of two with shared life');
+  note.textContent = bits.join(' · ') + '.';
+}
+
+// Two-Headed Giant counts in TEAMS (2 players each), so the count dropdown asks
+// for teams there and players everywhere else. Reads the pending format from the
+// dropdown so switching format relabels/rebuilds the options before Apply.
+function updatePlayerCountChooser() {
+  const key = document.getElementById('setFormat').value;
+  const f = FORMAT_DEFS.find(x => x.key === key) || FORMAT_DEFS[0];
+  const sel = document.getElementById('setPlayerCount');
+  const label = document.getElementById('setCountLabel');
+  if (f.teams) {
+    label.textContent = 'Number of Teams (2 players each)';
+    sel.innerHTML = [2, 3].map(t =>
+      `<option value="${t}">${t} Teams (${t * 2} players)</option>`).join('');
+    sel.value = Math.max(2, Math.min(3, Math.round((state.playerCount || 4) / 2)));
+  } else {
+    label.textContent = 'Number of Players';
+    sel.innerHTML = [2, 3, 4, 5, 6].map(n =>
+      `<option value="${n}">${n} Players</option>`).join('');
+    sel.value = Math.max(2, Math.min(6, state.playerCount || 4));
+  }
+}
+document.getElementById('setFormat').addEventListener('change', () => {
+  updateFormatNote();
+  updatePlayerCountChooser();
+});
+document.getElementById('btnSettings').addEventListener('click', () => {
+  document.getElementById('setFormat').value = state.format;
+  updatePlayerCountChooser();
+  updateFormatNote();
+  const sc = document.getElementById('setCounters');
+  sc.innerHTML = COUNTER_DEFS.map(d => `
+    <label class="ctog"><input type="checkbox" data-counter="${d.key}" ${state.defaultCounters[d.key] ? 'checked' : ''}> ${d.label}</label>
+  `).join('');
+  document.getElementById('settingsModal').classList.add('active');
+});
+document.getElementById('setCancel').addEventListener('click', () => {
+  document.getElementById('settingsModal').classList.remove('active');
+});
+document.getElementById('setApply').addEventListener('click', () => {
+  state.format = document.getElementById('setFormat').value;
+  let pc = parseInt(document.getElementById('setPlayerCount').value);
+  // In Two-Headed Giant the dropdown value is the number of TEAMS — each team is
+  // two players, so the actual player count is teams × 2.
+  if (isTwoHeaded()) pc = pc * 2;
+  state.playerCount = pc;
+  state.startLife = formatDef().life;
+  document.querySelectorAll('#setCounters input').forEach(inp => {
+    state.defaultCounters[inp.dataset.counter] = inp.checked;
+  });
+  initPlayers();
+  render(); save();
+  document.getElementById('settingsModal').classList.remove('active');
+});
+
+/* New game */
+document.getElementById('btnNewGame').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.add('active');
+});
+document.getElementById('confirmCancel').addEventListener('click', () => {
+  document.getElementById('confirmModal').classList.remove('active');
+});
+// Continue with current profiles — only life/counters reset
+document.getElementById('confirmYes').addEventListener('click', () => {
+  state.winCredited = null;
+  state.players.forEach(p => {
+    p.life = state.startLife;
+    Object.keys(p.counterValues).forEach(k => p.counterValues[k] = 0);
+    Object.keys(p.commanderDmg).forEach(k => p.commanderDmg[k] = [0, 0]);
+    p.commanderTax = [0, 0];
+    p.lastDelta = 0;
+  });
+  render(); save();
+  document.getElementById('confirmModal').classList.remove('active');
+});
+
+// Fresh new game — also clears names, colors, and commander setups (keeps rotation)
+document.getElementById('confirmFresh').addEventListener('click', () => {
+  state.winCredited = null;
+  state.players.forEach((p, i) => {
+    p.name = DEFAULT_NAMES[i];
+    p.color = COLORS[i % COLORS.length];
+    p.commanderCount = 1;
+    p.commanderNames = ['Commander', 'Partner'];
+    p.commanderTax = [0, 0];
+    p.counters = { ...state.defaultCounters };
+    p.counterValues = { poison: 0, energy: 0, exp: 0 };
+    p.showCommander = formatHasCommander();
+    p.life = state.startLife;
+    p.lastDelta = 0;
+    Object.keys(p.commanderDmg).forEach(k => p.commanderDmg[k] = [0, 0]);
+  });
+  render(); save();
+  document.getElementById('confirmModal').classList.remove('active');
+});
+
+/* ===== Player Profiles =====
+   Two-level model: a profile is a PLAYER (parent) that owns a list of
+   COMMANDERS (children). Wins are tracked both at the player level (total)
+   and per-commander. Shape:
+     { name, color, wins, commanders: [ { names:[a,b], count, color, wins } ] }
+*/
+
+// Signature used to match two commander setups (case-insensitive, ignores placeholders).
+function cmdSignature(names, count) {
+  const real = (names || []).slice(0, count || 1)
+    .map(n => String(n || '').trim())
+    .filter(n => n && n !== 'Commander' && n !== 'Partner');
+  return real.length ? real.join(' / ').toLowerCase() : '(unnamed)';
+}
+
+// Human label for a commander entry.
+function cmdLabelOf(cmd) {
+  const real = ((cmd && cmd.names) || []).slice(0, (cmd && cmd.count) || 1)
+    .map(n => String(n || '').trim())
+    .filter(n => n && n !== 'Commander' && n !== 'Partner');
+  return real.length ? real.join(' / ') : 'No commander set';
+}
+
+// A player's total wins is the sum of their commanders' wins, so the headline
+// number always matches the per-commander breakdown shown beneath it.
+function playerTotalWins(p) {
+  return ((p && p.commanders) || []).reduce((sum, c) => sum + (c.wins || 0), 0);
+}
+
+// Normalize any stored profile (old flat shape or new nested shape) to the nested model.
+function normalizeProfile(p) {
+  if (p && Array.isArray(p.commanders)) {
+    return {
+      name: p.name,
+      color: p.color,
+      wins: p.wins || 0,
+      commanders: p.commanders.map(c => ({
+        names: (c.names || ['Commander', 'Partner']).slice(0, 2),
+        count: c.count || 1,
+        color: c.color || p.color,
+        wins: c.wins || 0,
+      })),
+    };
+  }
+  // Legacy flat profile -> one player with a single commander entry.
+  const names = (p.commanderNames || ['Commander', 'Partner']).slice(0, 2);
+  const count = p.commanderCount || 1;
+  const w = p.wins || 0;
+  const isUnnamed = cmdSignature(names, count) === '(unnamed)';
+  const commanders = (isUnnamed && w === 0)
+    ? []
+    : [{ names, count, color: p.color, wins: w }];
+  return { name: p.name, color: p.color, wins: w, commanders };
+}
+
+function loadProfiles() {
+  try {
+    const raw = localStorage.getItem('mtg-life-profiles');
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.map(normalizeProfile) : [];
+  } catch(e) { return []; }
+}
+
+function saveProfiles(profiles) {
+  try { localStorage.setItem('mtg-life-profiles', JSON.stringify(profiles)); } catch(e) {}
+}
+
+// Credit a win to the player profile matching the winner's name (case-insensitive),
+// AND to the specific commander they were playing. If that commander isn't saved
+// under the player yet, it's added so the breakdown captures it.
+function creditProfileWin(name, cmdNames, cmdCount) {
+  const n = String(name || '').trim();
+  if (!n) return false;
+  const profiles = loadProfiles();
+  const i = profiles.findIndex(x => x.name && x.name.toLowerCase() === n.toLowerCase());
+  if (i < 0) return false; // winner isn't a saved player — nothing to credit
+  const player = profiles[i];
+  player.wins = (player.wins || 0) + 1;
+  const sig = cmdSignature(cmdNames, cmdCount);
+  let cmd = (player.commanders || []).find(c => cmdSignature(c.names, c.count) === sig);
+  if (!cmd) {
+    cmd = { names: (cmdNames || ['Commander', 'Partner']).slice(0, 2), count: cmdCount || 1, color: player.color, wins: 0 };
+    player.commanders.push(cmd);
+  }
+  cmd.wins = (cmd.wins || 0) + 1;
+  saveProfiles(profiles);
+  return true;
+}
+
+function renderLeaderboard() {
+  const list = document.getElementById('lbList');
+  if (!list) return;
+  const profiles = loadProfiles();
+  if (profiles.length === 0) {
+    list.innerHTML = '<div class="profile-empty">No saved players yet. Save player setups as profiles, then their wins will show up here.</div>';
+    return;
+  }
+  const sorted = profiles.slice().sort((a, b) =>
+    playerTotalWins(b) - playerTotalWins(a) || String(a.name).localeCompare(String(b.name)));
+  const medals = ['🥇', '🥈', '🥉'];
+  list.innerHTML = sorted.map((p, i) => {
+    const total = playerTotalWins(p);
+    const cmds = (p.commanders || []).slice()
+      .sort((a, b) => (b.wins || 0) - (a.wins || 0));
+    const cmdRows = cmds.filter(c => (c.wins || 0) > 0).map(c => `
+      <div class="lb-cmd-row">
+        <span class="roll-swatch" data-color="${c.color || p.color}"></span>
+        <span class="lb-cmd-name">${escapeHtml(cmdLabelOf(c))}</span>
+        <span class="lb-cmd-wins">${c.wins} ${c.wins === 1 ? 'win' : 'wins'}</span>
+      </div>`).join('');
+    return `
+      <div class="lb-player">
+        <div class="lb-row">
+          <span class="lb-rank">${medals[i] || (i + 1)}</span>
+          <span class="roll-swatch" data-color="${p.color}"></span>
+          <span class="lb-name">${escapeHtml(p.name)}</span>
+          <span class="lb-wins">${total} ${total === 1 ? 'win' : 'wins'}</span>
+        </div>
+        ${cmdRows ? `<div class="lb-cmd-list">${cmdRows}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function renderProfileList() {
+  const container = document.getElementById('pmProfileList');
+  if (!container) return;
+  const profiles = loadProfiles();
+  if (profiles.length === 0) {
+    container.innerHTML = '<div class="profile-empty">No saved players yet. Save the current setup to reuse it later.</div>';
+    return;
+  }
+  // In commander-less formats (Standard/Legacy/Pauper) a profile applies only the
+  // player's name + color — there's no commander to load, so the chip is a direct
+  // "apply" button with no expandable commander sublist.
+  const hasCmd = formatHasCommander();
+  container.innerHTML = profiles.map((prof, i) => {
+    const wins = playerTotalWins(prof);
+    const winsBadge = wins > 0 ? `<span class="pwins" title="Total wins">🏆 ${wins}</span>` : '';
+    const cmds = prof.commanders || [];
+    const cmdChips = cmds.length ? cmds.map((c, ci) => {
+      const cw = c.wins || 0;
+      const cwBadge = cw > 0 ? `<span class="pwins" title="Wins with this commander">🏆 ${cw}</span>` : '';
+      return `<span class="cmd-chip" data-pi="${i}" data-ci="${ci}" title="Load this commander">
+        <span class="pcolor" data-color="${c.color || prof.color}"></span>
+        <span class="pname">${escapeHtml(cmdLabelOf(c))}</span>
+        ${cwBadge}
+        <button class="pdel cmddel" data-pi="${i}" data-ci="${ci}" title="Delete commander">×</button>
+      </span>`;
+    }).join('') : '<div class="profile-empty" style="padding:4px 2px;">No commanders saved yet — pick a commander setup on this tile and Save.</div>';
+    const chipTitle = hasCmd ? 'Show commanders' : 'Load player (name & color)';
+    return `<div class="profile-player">
+      <div class="profile-chip player-chip" data-player-idx="${i}" title="${chipTitle}">
+        <span class="pcolor" data-color="${prof.color}"></span>
+        <span class="pname">${escapeHtml(prof.name)}</span>
+        ${winsBadge}
+        ${hasCmd ? '<span class="pcaret">▾</span>' : ''}
+        <button class="pdel" data-player-del="${i}" title="Delete player">×</button>
+      </div>
+      ${hasCmd ? `<div class="cmd-sublist" data-sub="${i}" style="display:none;">${cmdChips}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // Player chip: in commander formats it toggles the commander sublist; in
+  // commander-less formats it directly applies the player's name + color.
+  container.querySelectorAll('.player-chip').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.pdel')) return;
+      const pi = parseInt(el.dataset.playerIdx);
+      if (!hasCmd) { applyProfile(pi, null); return; }
+      const sub = container.querySelector(`.cmd-sublist[data-sub="${pi}"]`);
+      const caret = el.querySelector('.pcaret');
+      if (sub) {
+        const open = sub.style.display === 'none';
+        sub.style.display = open ? 'flex' : 'none';
+        if (caret) caret.textContent = open ? '▴' : '▾';
+      }
+    });
+  });
+  container.querySelectorAll('[data-player-del]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pi = parseInt(btn.dataset.playerDel);
+      const profs = loadProfiles();
+      const name = profs[pi] ? profs[pi].name : 'this player';
+      if (confirm(`Delete player "${name}" and all their commanders?`)) {
+        profs.splice(pi, 1);
+        saveProfiles(profs);
+        renderProfileList();
+      }
+    });
+  });
+
+  // Apply a commander to the current tile
+  container.querySelectorAll('.cmd-chip').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.pdel')) return;
+      applyProfile(parseInt(el.dataset.pi), parseInt(el.dataset.ci));
+    });
+  });
+  // Delete a single commander
+  container.querySelectorAll('.cmddel').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pi = parseInt(btn.dataset.pi);
+      const ci = parseInt(btn.dataset.ci);
+      const profs = loadProfiles();
+      if (!profs[pi] || !profs[pi].commanders[ci]) return;
+      const label = cmdLabelOf(profs[pi].commanders[ci]);
+      if (confirm(`Delete commander "${label}" from ${profs[pi].name}?`)) {
+        profs[pi].commanders.splice(ci, 1);
+        saveProfiles(profs);
+        renderProfileList();
+      }
+    });
+  });
+}
+
+// Saves the current tile under a PLAYER profile and records the current
+// commander setup as one of that player's commanders.
+function saveCurrentAsProfile() {
+  const idx = state.activeModalPlayer;
+  if (idx === null) return;
+  const p = state.players[idx];
+  const defaultName = p.name || `Player ${idx+1}`;
+  const playerName = prompt('Player name:', defaultName);
+  if (!playerName || !playerName.trim()) return;
+  const trimmed = playerName.trim().slice(0, 30);
+
+  const profiles = loadProfiles();
+  let player = profiles.find(x => x.name && x.name.toLowerCase() === trimmed.toLowerCase());
+  if (!player) {
+    player = { name: trimmed, color: p.color, wins: 0, commanders: [] };
+    profiles.push(player);
+  } else {
+    player.color = p.color; // refresh the player's default color
+  }
+
+  // Only record a commander entry in formats that use commanders. In commander-less
+  // formats the profile keeps just the player's name + color.
+  if (formatHasCommander()) {
+    const names = (p.commanderNames || ['Commander', 'Partner']).slice(0, 2);
+    const count = p.commanderCount || 1;
+    const sig = cmdSignature(names, count);
+    const existingCmd = player.commanders.find(c => cmdSignature(c.names, c.count) === sig);
+    if (existingCmd) {
+      existingCmd.names = names;
+      existingCmd.count = count;
+      existingCmd.color = p.color;
+    } else {
+      player.commanders.push({ names, count, color: p.color, wins: 0 });
+    }
+  }
+  saveProfiles(profiles);
+  renderProfileList();
+}
+
+// Apply a specific commander (under a player) to the current tile.
+function applyProfile(playerIdx, cmdIdx) {
+  const idx = state.activeModalPlayer;
+  if (idx === null) return;
+  const profiles = loadProfiles();
+  const prof = profiles[playerIdx];
+  if (!prof) return;
+  const p = state.players[idx];
+  p.name = prof.name;
+  const cmd = (prof.commanders || [])[cmdIdx];
+  if (cmd) {
+    p.color = cmd.color || prof.color || p.color;
+    p.commanderCount = cmd.count || 1;
+    p.commanderNames = (cmd.names && cmd.names.length)
+      ? cmd.names.slice(0, 2).concat(['Commander', 'Partner']).slice(0, 2)
+      : ['Commander', 'Partner'];
+  } else {
+    p.color = prof.color || p.color;
+  }
+  save();
+  renderPlayerModal();
+  render();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('pmSaveProfile');
+  if (btn) btn.addEventListener('click', saveCurrentAsProfile);
+});
+// Also bind immediately in case script runs after DOM ready
+(function bindProfileSaveBtn() {
+  const btn = document.getElementById('pmSaveProfile');
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', saveCurrentAsProfile);
+  }
+})();
+
+/* ===== High Roll ===== */
+const rollState = {
+  sides: 20,
+  rolls: {},        // idx -> current roll value
+  eligible: [],     // idx[] still in contention
+  isRolling: false,
+};
+
+function openRollModal() {
+  rollState.rolls = {};
+  rollState.eligible = state.players.map((_, i) => i);
+  renderRollList();
+  document.getElementById('rollStatus').innerHTML = 'Tap Roll to determine first player';
+  document.getElementById('rollGo').textContent = '🎲 Roll';
+  document.getElementById('rollModal').classList.add('active');
+}
+
+function renderRollList() {
+  const list = document.getElementById('rollList');
+  list.innerHTML = '';
+  state.players.forEach((p, idx) => {
+    const inRound = rollState.eligible.includes(idx);
+    const val = rollState.rolls[idx];
+    const row = document.createElement('div');
+    row.className = 'roll-row' + (inRound ? '' : ' dimmed');
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <span class="roll-swatch" data-color="${p.color}"></span>
+      <span class="roll-name">${escapeHtml(p.name)}</span>
+      <span class="roll-crown" data-crown></span>
+      <span class="roll-value" data-val>${val != null ? val : '—'}</span>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function rollDie() {
+  return Math.floor(Math.random() * rollState.sides) + 1;
+}
+
+async function doRoll() {
+  if (rollState.isRolling) return;
+  rollState.isRolling = true;
+  const goBtn = document.getElementById('rollGo');
+  const statusEl = document.getElementById('rollStatus');
+  goBtn.disabled = true;
+
+  const rolling = rollState.eligible.slice();
+  if (rolling.length === 0) { rollState.isRolling = false; goBtn.disabled = false; return; }
+
+  // Reset prior rolls for this round
+  rolling.forEach(idx => { rollState.rolls[idx] = null; });
+  renderRollList();
+
+  statusEl.textContent = rolling.length === state.players.length
+    ? 'Rolling…'
+    : `Rolling tiebreaker for ${rolling.length} players…`;
+
+  // Animate: cycle random numbers for ~900ms, then reveal final per row staggered
+  const rows = {};
+  rolling.forEach(idx => {
+    const row = document.querySelector(`.roll-row[data-idx="${idx}"]`);
+    row.classList.remove('winner', 'tied');
+    row.classList.add('rolling');
+    rows[idx] = row;
+  });
+
+  const flickerInterval = setInterval(() => {
+    rolling.forEach(idx => {
+      const v = rollDie();
+      rows[idx].querySelector('[data-val]').textContent = v;
+    });
+  }, 70);
+
+  await new Promise(r => setTimeout(r, 900));
+  clearInterval(flickerInterval);
+
+  // Reveal final values, staggered
+  const finalRolls = {};
+  for (let i = 0; i < rolling.length; i++) {
+    const idx = rolling[i];
+    finalRolls[idx] = rollDie();
+    rollState.rolls[idx] = finalRolls[idx];
+    rows[idx].classList.remove('rolling');
+    rows[idx].querySelector('[data-val]').textContent = finalRolls[idx];
+    await new Promise(r => setTimeout(r, 180));
+  }
+
+  // Determine winner / ties
+  const max = Math.max(...rolling.map(i => finalRolls[i]));
+  const topRollers = rolling.filter(i => finalRolls[i] === max);
+
+  if (topRollers.length === 1) {
+    const winnerIdx = topRollers[0];
+    const winner = state.players[winnerIdx];
+    rows[winnerIdx].classList.add('winner');
+    rows[winnerIdx].querySelector('[data-crown]').textContent = '👑';
+    // Dim losers
+    rolling.forEach(idx => {
+      if (idx !== winnerIdx) {
+        document.querySelector(`.roll-row[data-idx="${idx}"]`).classList.add('dimmed');
+      }
+    });
+    statusEl.innerHTML = `<span class="winner-name">${escapeHtml(winner.name)}</span> goes first! (rolled ${max})`;
+    rollState.eligible = [winnerIdx];
+    goBtn.textContent = '🎲 Roll Again';
+  } else {
+    // Tie — only the top rollers re-roll
+    topRollers.forEach(idx => rows[idx].classList.add('tied'));
+    rolling.forEach(idx => {
+      if (!topRollers.includes(idx)) {
+        document.querySelector(`.roll-row[data-idx="${idx}"]`).classList.add('dimmed');
+      }
+    });
+    const names = topRollers.map(i => state.players[i].name).join(', ');
+    statusEl.textContent = `Tie at ${max}! ${names} re-roll…`;
+    rollState.eligible = topRollers;
+    goBtn.textContent = '🎲 Roll Tiebreaker';
+    // Auto re-roll after a beat
+    setTimeout(() => {
+      rollState.isRolling = false;
+      goBtn.disabled = false;
+      doRoll();
+    }, 1100);
+    return;
+  }
+
+  rollState.isRolling = false;
+  goBtn.disabled = false;
+}
+
+document.getElementById('btnRoll').addEventListener('click', openRollModal);
+
+/* ===== Leaderboard wiring ===== */
+document.getElementById('btnLeaderboard').addEventListener('click', () => {
+  renderLeaderboard();
+  document.getElementById('leaderboardModal').classList.add('active');
+});
+document.getElementById('lbClose').addEventListener('click', () => {
+  document.getElementById('leaderboardModal').classList.remove('active');
+});
+document.getElementById('lbReset').addEventListener('click', () => {
+  if (!confirm('Reset all profile win counts to zero?')) return;
+  const profiles = loadProfiles();
+  profiles.forEach(p => {
+    p.wins = 0;
+    (p.commanders || []).forEach(c => { c.wins = 0; });
+  });
+  saveProfiles(profiles);
+  renderLeaderboard();
+});
+
+/* ===== Profile Export / Import =====
+   Profiles live in this browser's localStorage, not in the HTML file, so moving
+   to a new file or device needs an explicit hand-off. Export writes a JSON file;
+   Import merges it back in. Merge is idempotent: matching players/commanders take
+   the HIGHER win count rather than summing, so re-importing the same file is safe.
+*/
+function exportProfiles() {
+  const profiles = loadProfiles();
+  if (!profiles.length) { alert('No saved profiles to export yet.'); return; }
+  const payload = {
+    type: 'mtg-life-profiles',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    profiles,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mtg-profiles-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Merge incoming profiles into existing ones. Match players by name and
+// commanders by signature (both case-insensitive). For conflicts, keep the
+// higher win count so importing the same file twice doesn't inflate totals.
+function mergeProfiles(existing, incoming) {
+  const out = existing.map(normalizeProfile);
+  incoming.forEach(inc => {
+    const match = out.find(p => p.name && inc.name && p.name.toLowerCase() === inc.name.toLowerCase());
+    if (!match) { out.push(inc); return; }
+    match.color = inc.color || match.color;
+    (inc.commanders || []).forEach(ic => {
+      const sig = cmdSignature(ic.names, ic.count);
+      const ec = match.commanders.find(c => cmdSignature(c.names, c.count) === sig);
+      if (!ec) {
+        match.commanders.push(ic);
+      } else {
+        ec.wins = Math.max(ec.wins || 0, ic.wins || 0);
+        ec.color = ic.color || ec.color;
+      }
+    });
+    match.wins = playerTotalWins(match);
+  });
+  return out;
+}
+
+function importProfilesFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data;
+    try { data = JSON.parse(reader.result); }
+    catch (e) { alert("That file isn't valid profile data — couldn't read it."); return; }
+    // Accept either the wrapped { profiles: [...] } payload or a bare array.
+    const raw = Array.isArray(data) ? data
+              : (data && Array.isArray(data.profiles) ? data.profiles : null);
+    if (!raw) { alert("That file doesn't look like exported MTG profiles."); return; }
+    const incoming = raw.map(normalizeProfile);
+    const before = loadProfiles();
+    const merged = mergeProfiles(before, incoming);
+    saveProfiles(merged);
+    renderLeaderboard();
+    renderProfileList();
+    const added = merged.length - before.length;
+    const addedNote = added > 0
+      ? (added + ' new player' + (added === 1 ? '' : 's') + ' added')
+      : 'merged into existing players';
+    alert('Imported ' + incoming.length + ' profile' + (incoming.length === 1 ? '' : 's') + ' — ' + addedNote + '.');
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('lbExport').addEventListener('click', exportProfiles);
+document.getElementById('lbImport').addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) importProfilesFromFile(file);
+  e.target.value = ''; // allow re-selecting the same file later
+});
+
+document.getElementById('rollClose').addEventListener('click', () => {
+  document.getElementById('rollModal').classList.remove('active');
+});
+document.getElementById('rollGo').addEventListener('click', () => {
+  // If a winner has already been chosen, "Roll Again" should reset to all players
+  if (rollState.eligible.length === 1 && Object.keys(rollState.rolls).length > 0) {
+    rollState.rolls = {};
+    rollState.eligible = state.players.map((_, i) => i);
+    renderRollList();
+  }
+  doRoll();
+});
+document.getElementById('rollDieSelect').querySelectorAll('button').forEach(b => {
+  b.addEventListener('click', () => {
+    if (rollState.isRolling) return;
+    document.querySelectorAll('#rollDieSelect button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    rollState.sides = parseInt(b.dataset.sides);
+    // Reset on die change
+    rollState.rolls = {};
+    rollState.eligible = state.players.map((_, i) => i);
+    renderRollList();
+    document.getElementById('rollStatus').textContent = `Rolling d${rollState.sides} — tap Roll`;
+    document.getElementById('rollGo').textContent = '🎲 Roll';
+  });
+});
+
+document.querySelectorAll('.modal-backdrop').forEach(bd => {
+  bd.addEventListener('click', (e) => {
+    if (e.target === bd) bd.classList.remove('active');
+  });
+});
+
+/* Init */
+if (!load()) initPlayers();
+render();
+
+/* Re-sync rotation dims on window resize */
+window.addEventListener('resize', syncRotationDims);
+
+/* Prevent default right-click except on counters (used for -1) */
+document.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest('.counter')) e.preventDefault();
+});
+</script>
+<script>
+// Smart "Install App" button: native prompt on Android/desktop Chromium,
+// guided Share-sheet steps on iOS (which has no programmatic install API).
+(function () {
+  const btn = document.getElementById('btnInstall');
+  const iosModal = document.getElementById('installModal');
+  const iosClose = document.getElementById('installModalClose');
+  let deferredPrompt = null;
+
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  if (isStandalone) return; // already installed — keep the button hidden
+
+  // Android / desktop Chromium fire this when the app is installable.
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    btn.style.display = '';
+  });
+
+  // iOS can't auto-prompt, so surface the button to show the manual steps.
+  if (isIOS) btn.style.display = '';
+
+  btn.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      if (choice.outcome === 'accepted') btn.style.display = 'none';
+    } else if (isIOS) {
+      iosModal.classList.add('active');
+    }
+  });
+
+  if (iosClose) iosClose.addEventListener('click', () => iosModal.classList.remove('active'));
+  window.addEventListener('appinstalled', () => { btn.style.display = 'none'; });
+})();
+</script>
+<script>
+// Register the offline service worker (only works over http(s)/localhost, not file://).
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+</body>
+</html>
