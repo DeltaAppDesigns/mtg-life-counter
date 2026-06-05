@@ -1,7 +1,7 @@
 // MTG Life Counter — offline service worker.
 // App page: network-first (so a fresh GitHub deploy reaches every device while online).
 // Static icons/manifest: cache-first (rarely change; instant + offline).
-const CACHE = 'mtg-life-counter-v7.0.0';
+const CACHE = 'mtg-life-counter-v7.0.1';
 const ASSETS = [
   './',
   './index.html',
