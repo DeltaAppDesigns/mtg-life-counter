@@ -190,25 +190,36 @@
   .life-delta.negative { color: #f87171; }
 
   /* Counters row */
+  /* Every bubble dimension is expressed as a multiple of --u, so setting a
+     single --cscale (done per-tile by fitCounters() in JS) shrinks the whole
+     area proportionally until it fits without a scrollbar — even with a full
+     table of opponents each adding a commander-damage bubble. At scale 1 the
+     values match the original fixed-pixel sizes. max-height lets the area grow
+     to a share of the tile before any shrinking kicks in, so with only a few
+     counters the bubbles stay full-size. */
   .counters {
-    display: flex; flex-wrap: wrap; gap: 8px; padding: 10px;
-    background: rgba(0,0,0,0.35); justify-content: center;
-    max-height: 150px; overflow-y: auto;
+    --cscale: 1;
+    --u: calc(17px * var(--cscale));
+    display: flex; flex-wrap: wrap; gap: calc(var(--u) * 0.5);
+    padding: calc(var(--u) * 0.55);
+    background: rgba(0,0,0,0.35); justify-content: center; align-content: flex-start;
+    max-height: 62%; overflow-y: auto;
   }
   .counter {
-    display: flex; align-items: center; gap: 6px;
+    display: flex; align-items: center; gap: calc(var(--u) * 0.35);
     background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15);
-    padding: 5px 7px; border-radius: 20px; font-size: 17px;
+    padding: calc(var(--u) * 0.3) calc(var(--u) * 0.42);
+    border-radius: calc(var(--u) * 1.2); font-size: var(--u);
     transition: background 0.15s;
   }
   .counter:hover { background: rgba(0,0,0,0.6); }
-  .counter .icon { font-size: 20px; margin: 0 2px; }
-  .counter .val { font-weight: 700; min-width: 28px; text-align: center; font-size: 19px; }
-  .counter .label-sub { font-size: 13px; opacity: 0.85; margin: 0 3px; white-space: nowrap; }
+  .counter .icon { font-size: calc(var(--u) * 1.15); margin: 0 calc(var(--u) * 0.12); }
+  .counter .val { font-weight: 700; min-width: calc(var(--u) * 1.6); text-align: center; font-size: calc(var(--u) * 1.1); }
+  .counter .label-sub { font-size: calc(var(--u) * 0.76); opacity: 0.85; margin: 0 calc(var(--u) * 0.18); white-space: nowrap; }
   .cnt-btn {
     background: rgba(255,255,255,0.2); border: none; color: inherit;
-    width: 30px; height: 30px; border-radius: 50%;
-    font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
+    width: calc(var(--u) * 1.75); height: calc(var(--u) * 1.75); border-radius: 50%;
+    font-size: calc(var(--u) * 1.15); line-height: 1; cursor: pointer; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
     flex-shrink: 0; font-weight: 700;
   }
@@ -491,6 +502,23 @@
   .lb-cmd-name { flex: 1; font-size: 13px; color: #ddd; }
   .lb-cmd-wins { font-size: 12px; font-weight: 700; color: #d4a017; }
 
+  /* Wins broken down by how many players were at the table (2P, 3P, 4P…). Lets
+     you compare people fairly within the same game size, so someone who only
+     joins the occasional 4-player game isn't buried under a pair who rack up
+     wins in lots of 2-player games. */
+  .lb-size-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    margin: 6px 0 2px 30px;
+  }
+  .lb-size-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .lb-size-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #0d0d0d; border: 1px solid #262626; border-radius: 12px;
+    padding: 2px 8px; font-size: 12px;
+  }
+  .lb-size-n { color: #9db4c9; font-weight: 600; }
+  .lb-size-w { color: #fbbf24; font-weight: 700; }
+
   /* Two-level profile accordion */
   .profile-player { width: 100%; }
   .player-chip { width: 100%; box-sizing: border-box; }
@@ -646,7 +674,7 @@
       <button class="btn-primary" id="setApply">Apply & New Game</button>
     </div>
 
-    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.0.1</div>
+    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.1.0</div>
   </div>
 </div>
 
@@ -693,7 +721,7 @@
 <div class="modal-backdrop" id="leaderboardModal">
   <div class="modal">
     <h2>🏆 Win Leaderboard</h2>
-    <p style="color:#bbb; font-size:13px; margin-bottom:14px;">Wins are tracked per saved profile. Win a game with a player whose name matches a saved profile and it counts here.</p>
+    <p style="color:#bbb; font-size:13px; margin-bottom:14px;">Wins are tracked per saved profile. Win a game with a player whose name matches a saved profile and it counts here. Each player's wins are also split by table size (2P, 3P, 4P…) so you can compare people fairly within the same game size.</p>
     <div id="lbList"></div>
     <p style="color:#777; font-size:12px; margin:14px 0 0; line-height:1.4;">
       Export saves all your players, commanders & wins to a file. Import merges that file into this device — safe to run more than once (it never double-counts wins).
@@ -952,7 +980,7 @@ function render() {
     winnerIndices.forEach(i => {
       const winP = state.players[i];
       const info = winCmdInfo(winP);
-      creditProfileWin(winP.name || '', info.names, info.count);
+      creditProfileWin(winP.name || '', info.names, info.count, state.playerCount);
     });
     save();
     const lb = document.getElementById('leaderboardModal');
@@ -1008,6 +1036,7 @@ function render() {
     });
     bindGridEvents();
     syncRotationDims();
+    fitCounters();
     return;
   }
 
@@ -1046,6 +1075,7 @@ function render() {
 
   bindGridEvents();
   syncRotationDims();
+  fitCounters();
 }
 
 function renderCounters(p, idx) {
@@ -1139,6 +1169,24 @@ function syncRotationDims() {
     resizeObs.disconnect();
   }
   document.querySelectorAll('.player').forEach(t => resizeObs.observe(t));
+}
+
+// Shrink each tile's counter bubbles just enough that they all fit without a
+// scrollbar. The counter CSS multiplies every dimension by a per-tile --cscale;
+// we start at full size and step it down only while the bubbles overflow their
+// (capped) area. With a full table of opponents adding commander-damage bubbles
+// the whole cluster scales down to stay visible instead of forcing a scroll.
+function fitCounters() {
+  document.querySelectorAll('.counters').forEach(box => {
+    box.style.setProperty('--cscale', '1');
+    let scale = 1;
+    // Guard bounds the loop; 0.5 is the smallest we shrink before letting the
+    // rare extreme case (e.g. 6 players all running partners) fall back to scroll.
+    for (let guard = 0; guard < 12 && scale > 0.5 && box.scrollHeight > box.clientHeight + 1; guard++) {
+      scale = Math.max(0.5, scale - 0.06);
+      box.style.setProperty('--cscale', scale.toFixed(2));
+    }
+  });
 }
 
 // Global life-button hold tracker. Lives outside the per-button closure so
@@ -1707,6 +1755,22 @@ function playerTotalWins(p) {
   return ((p && p.commanders) || []).reduce((sum, c) => sum + (c.wins || 0), 0);
 }
 
+// Wins bucketed by how many players were at the table. Stored as a plain map
+// keyed by player count ("2", "3", "4"…) so new table sizes appear on their own
+// without any schema change. This sanitizer drops junk keys/values and keeps
+// only real, positive tallies.
+function sanitizeWinsByCount(obj) {
+  const out = {};
+  if (obj && typeof obj === 'object') {
+    Object.keys(obj).forEach(k => {
+      const n = parseInt(k, 10);
+      const v = parseInt(obj[k], 10);
+      if (n >= 2 && v > 0) out[n] = v;
+    });
+  }
+  return out;
+}
+
 // Normalize any stored profile (old flat shape or new nested shape) to the nested model.
 function normalizeProfile(p) {
   if (p && Array.isArray(p.commanders)) {
@@ -1714,6 +1778,7 @@ function normalizeProfile(p) {
       name: p.name,
       color: p.color,
       wins: p.wins || 0,
+      winsByCount: sanitizeWinsByCount(p.winsByCount),
       commanders: p.commanders.map(c => ({
         names: (c.names || ['Commander', 'Partner']).slice(0, 2),
         count: c.count || 1,
@@ -1730,7 +1795,7 @@ function normalizeProfile(p) {
   const commanders = (isUnnamed && w === 0)
     ? []
     : [{ names, count, color: p.color, wins: w }];
-  return { name: p.name, color: p.color, wins: w, commanders };
+  return { name: p.name, color: p.color, wins: w, winsByCount: sanitizeWinsByCount(p.winsByCount), commanders };
 }
 
 function loadProfiles() {
@@ -1749,7 +1814,7 @@ function saveProfiles(profiles) {
 // Credit a win to the player profile matching the winner's name (case-insensitive),
 // AND to the specific commander they were playing. If that commander isn't saved
 // under the player yet, it's added so the breakdown captures it.
-function creditProfileWin(name, cmdNames, cmdCount) {
+function creditProfileWin(name, cmdNames, cmdCount, playerCount) {
   const n = String(name || '').trim();
   if (!n) return false;
   const profiles = loadProfiles();
@@ -1757,6 +1822,13 @@ function creditProfileWin(name, cmdNames, cmdCount) {
   if (i < 0) return false; // winner isn't a saved player — nothing to credit
   const player = profiles[i];
   player.wins = (player.wins || 0) + 1;
+  // Also tally the win under the size of the table it was won at (2, 3, 4…),
+  // so the leaderboard can show a fair per-game-size breakdown.
+  const pc = parseInt(playerCount, 10);
+  if (pc >= 2) {
+    if (!player.winsByCount || typeof player.winsByCount !== 'object') player.winsByCount = {};
+    player.winsByCount[pc] = (player.winsByCount[pc] || 0) + 1;
+  }
   const sig = cmdSignature(cmdNames, cmdCount);
   let cmd = (player.commanders || []).find(c => cmdSignature(c.names, c.count) === sig);
   if (!cmd) {
@@ -1789,6 +1861,20 @@ function renderLeaderboard() {
         <span class="lb-cmd-name">${escapeHtml(cmdLabelOf(c))}</span>
         <span class="lb-cmd-wins">${c.wins} ${c.wins === 1 ? 'win' : 'wins'}</span>
       </div>`).join('');
+    // Per-table-size breakdown: one chip per game size that has wins (2P, 3P…),
+    // shown smallest table first so equal-size games line up for comparison.
+    const buckets = sanitizeWinsByCount(p.winsByCount);
+    const sizeKeys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+    const sizeChips = sizeKeys.map(n => {
+      const w = buckets[n];
+      return `<span class="lb-size-chip" title="${w} ${w === 1 ? 'win' : 'wins'} in ${n}-player games">
+        <span class="lb-size-n">${n}P</span>
+        <span class="lb-size-w">${w}</span>
+      </span>`;
+    }).join('');
+    const sizeRow = sizeChips
+      ? `<div class="lb-size-row"><span class="lb-size-label">By table size</span>${sizeChips}</div>`
+      : '';
     return `
       <div class="lb-player">
         <div class="lb-row">
@@ -1797,6 +1883,7 @@ function renderLeaderboard() {
           <span class="lb-name">${escapeHtml(p.name)}</span>
           <span class="lb-wins">${total} ${total === 1 ? 'win' : 'wins'}</span>
         </div>
+        ${sizeRow}
         ${cmdRows ? `<div class="lb-cmd-list">${cmdRows}</div>` : ''}
       </div>`;
   }).join('');
@@ -2118,6 +2205,7 @@ document.getElementById('lbReset').addEventListener('click', () => {
   const profiles = loadProfiles();
   profiles.forEach(p => {
     p.wins = 0;
+    p.winsByCount = {};
     (p.commanders || []).forEach(c => { c.wins = 0; });
   });
   saveProfiles(profiles);
@@ -2168,6 +2256,13 @@ function mergeProfiles(existing, incoming) {
         ec.wins = Math.max(ec.wins || 0, ic.wins || 0);
         ec.color = ic.color || ec.color;
       }
+    });
+    // Merge table-size buckets the same idempotent way: keep the higher tally
+    // per size so re-importing the same file never inflates the numbers.
+    const incBuckets = sanitizeWinsByCount(inc.winsByCount);
+    match.winsByCount = sanitizeWinsByCount(match.winsByCount);
+    Object.keys(incBuckets).forEach(k => {
+      match.winsByCount[k] = Math.max(match.winsByCount[k] || 0, incBuckets[k]);
     });
     match.wins = playerTotalWins(match);
   });
@@ -2246,8 +2341,9 @@ document.querySelectorAll('.modal-backdrop').forEach(bd => {
 if (!load()) initPlayers();
 render();
 
-/* Re-sync rotation dims on window resize */
-window.addEventListener('resize', syncRotationDims);
+/* Re-sync rotation dims and re-fit the counter bubbles on window resize
+   (orientation change, split-screen, rotating a phone at the table, etc.) */
+window.addEventListener('resize', () => { syncRotationDims(); fitCounters(); });
 
 /* Prevent default right-click except on counters (used for -1) */
 document.addEventListener('contextmenu', (e) => {
@@ -2307,4 +2403,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 </script>
 </body>
 </html>
-<!-- BUILD-STAMP 2026-06-05 v10.0.1 -->
+<!-- BUILD-STAMP 2026-07-22 v10.1.0 — auto-scaling counters + wins-by-table-size -->

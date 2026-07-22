@@ -106,4 +106,16 @@ If you ever want to change the app:
   show up in Google unless you share it. There's nothing private in the app.
 - **Your data stays on your device.** Life totals are saved in your phone's
   browser, not uploaded anywhere.
-<!-- BUILD-STAMP 2026-06-05 v10.0.1 -->
+
+---
+
+## What's new in v10.1.0 (2026-07-22)
+
+- **Counters auto-fit.** The commander damage, commander tax, and other counter
+  bubbles now shrink to fit the tile so you don't have to scroll when there are
+  lots of players and commanders on the table.
+- **Wins split by table size.** The Wins leaderboard now breaks each player's
+  wins down by how many people were in the game (2P, 3P, 4P…), so occasional
+  players in bigger games can be compared fairly against a pair who play a lot
+  of two-player games.
+<!-- BUILD-STAMP 2026-07-22 v10.1.0 -->
