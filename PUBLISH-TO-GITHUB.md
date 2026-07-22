@@ -109,6 +109,16 @@ If you ever want to change the app:
 
 ---
 
+## What's new in v10.2.0 (2026-07-22)
+
+- **Separate leaderboards for every table size.** The Wins screen now has tabs —
+  **Overall**, plus a dedicated leaderboard for **2P, 3P, 4P, 5P, and 6P** games.
+  Each table size ranks on its own, so wins from a two-player game no longer mix
+  in with wins from a five-player game. Tap a tab to switch boards.
+- **Commander detail per size.** Inside each size board, a player's wins break
+  down by the commander that earned them at that game size (for games played from
+  this version on; earlier wins still appear on the Overall board).
+
 ## What's new in v10.1.0 (2026-07-22)
 
 - **Counters auto-fit.** The commander damage, commander tax, and other counter
@@ -118,4 +128,4 @@ If you ever want to change the app:
   wins down by how many people were in the game (2P, 3P, 4P…), so occasional
   players in bigger games can be compared fairly against a pair who play a lot
   of two-player games.
-<!-- BUILD-STAMP 2026-07-22 v10.1.0 -->
+<!-- BUILD-STAMP 2026-07-22 v10.2.0 -->

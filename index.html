@@ -519,6 +519,27 @@
   .lb-size-n { color: #9db4c9; font-weight: 600; }
   .lb-size-w { color: #fbbf24; font-weight: 700; }
 
+  /* Per-table-size leaderboard tabs (Overall, 2P, 3P … 6P). Each tab shows its
+     own ranking so a 2-player game and a 5-player game never share a board. */
+  .lb-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .lb-tab {
+    flex: 1 1 auto; min-width: 44px; text-align: center;
+    padding: 7px 10px; font-size: 13px; font-weight: 600;
+    color: #bbb; background: #0d0d0d;
+    border: 1px solid #262626; border-radius: 8px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .lb-tab:hover { background: #1a1a1a; border-color: #3a3a3a; }
+  .lb-tab.active { color: #fbbf24; background: #1a1608; border-color: #b8860b; }
+  .lb-section-title {
+    font-size: 13px; color: #9db4c9; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px; margin: 2px 0 10px;
+  }
+  .lb-empty-size {
+    color: #777; font-size: 13px; padding: 14px 6px;
+    text-align: center; line-height: 1.5;
+  }
+
   /* Two-level profile accordion */
   .profile-player { width: 100%; }
   .player-chip { width: 100%; box-sizing: border-box; }
@@ -674,7 +695,7 @@
       <button class="btn-primary" id="setApply">Apply & New Game</button>
     </div>
 
-    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.1.0</div>
+    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.2.0</div>
   </div>
 </div>
 
@@ -721,7 +742,8 @@
 <div class="modal-backdrop" id="leaderboardModal">
   <div class="modal">
     <h2>🏆 Win Leaderboard</h2>
-    <p style="color:#bbb; font-size:13px; margin-bottom:14px;">Wins are tracked per saved profile. Win a game with a player whose name matches a saved profile and it counts here. Each player's wins are also split by table size (2P, 3P, 4P…) so you can compare people fairly within the same game size.</p>
+    <p style="color:#bbb; font-size:13px; margin-bottom:14px;">Wins are tracked per saved profile. Win a game with a player whose name matches a saved profile and it counts here. Use the tabs to switch between the <b>Overall</b> board and a dedicated leaderboard for each table size — 2, 3, 4, 5, and 6-player games each rank on their own.</p>
+    <div class="lb-tabs" id="lbTabs"></div>
     <div id="lbList"></div>
     <p style="color:#777; font-size:12px; margin:14px 0 0; line-height:1.4;">
       Export saves all your players, commanders & wins to a file. Import merges that file into this device — safe to run more than once (it never double-counts wins).
@@ -1784,6 +1806,7 @@ function normalizeProfile(p) {
         count: c.count || 1,
         color: c.color || p.color,
         wins: c.wins || 0,
+        winsByCount: sanitizeWinsByCount(c.winsByCount),
       })),
     };
   }
@@ -1794,7 +1817,7 @@ function normalizeProfile(p) {
   const isUnnamed = cmdSignature(names, count) === '(unnamed)';
   const commanders = (isUnnamed && w === 0)
     ? []
-    : [{ names, count, color: p.color, wins: w }];
+    : [{ names, count, color: p.color, wins: w, winsByCount: {} }];
   return { name: p.name, color: p.color, wins: w, winsByCount: sanitizeWinsByCount(p.winsByCount), commanders };
 }
 
@@ -1832,40 +1855,69 @@ function creditProfileWin(name, cmdNames, cmdCount, playerCount) {
   const sig = cmdSignature(cmdNames, cmdCount);
   let cmd = (player.commanders || []).find(c => cmdSignature(c.names, c.count) === sig);
   if (!cmd) {
-    cmd = { names: (cmdNames || ['Commander', 'Partner']).slice(0, 2), count: cmdCount || 1, color: player.color, wins: 0 };
+    cmd = { names: (cmdNames || ['Commander', 'Partner']).slice(0, 2), count: cmdCount || 1, color: player.color, wins: 0, winsByCount: {} };
     player.commanders.push(cmd);
   }
   cmd.wins = (cmd.wins || 0) + 1;
+  // Bucket this commander's win by table size too, so each per-size leaderboard
+  // can show which commander earned the wins at that game size.
+  if (pc >= 2) {
+    if (!cmd.winsByCount || typeof cmd.winsByCount !== 'object') cmd.winsByCount = {};
+    cmd.winsByCount[pc] = (cmd.winsByCount[pc] || 0) + 1;
+  }
   saveProfiles(profiles);
   return true;
 }
 
-function renderLeaderboard() {
-  const list = document.getElementById('lbList');
-  if (!list) return;
-  const profiles = loadProfiles();
-  if (profiles.length === 0) {
-    list.innerHTML = '<div class="profile-empty">No saved players yet. Save player setups as profiles, then their wins will show up here.</div>';
-    return;
-  }
-  const sorted = profiles.slice().sort((a, b) =>
-    playerTotalWins(b) - playerTotalWins(a) || String(a.name).localeCompare(String(b.name)));
-  const medals = ['🥇', '🥈', '🥉'];
-  list.innerHTML = sorted.map((p, i) => {
-    const total = playerTotalWins(p);
-    const cmds = (p.commanders || []).slice()
-      .sort((a, b) => (b.wins || 0) - (a.wins || 0));
-    const cmdRows = cmds.filter(c => (c.wins || 0) > 0).map(c => `
+// Which board is showing: 'all' (Overall) or a table size as a string ('2'..'6').
+let lbView = 'all';
+const LB_SIZES = [2, 3, 4, 5, 6];
+
+// Wins a player earned specifically at an n-player table.
+function sizeWins(p, n) {
+  return sanitizeWinsByCount(p.winsByCount)[n] || 0;
+}
+
+const LB_MEDALS = ['🥇', '🥈', '🥉'];
+
+// The shared rank / color / name / win-count header row used by every board.
+function lbHeaderRow(p, rank, winCount) {
+  return `
+    <div class="lb-row">
+      <span class="lb-rank">${LB_MEDALS[rank] || (rank + 1)}</span>
+      <span class="roll-swatch" data-color="${p.color}"></span>
+      <span class="lb-name">${escapeHtml(p.name)}</span>
+      <span class="lb-wins">${winCount} ${winCount === 1 ? 'win' : 'wins'}</span>
+    </div>`;
+}
+
+// One commander detail row.
+function lbCmdRow(c, fallbackColor, wins) {
+  return `
       <div class="lb-cmd-row">
-        <span class="roll-swatch" data-color="${c.color || p.color}"></span>
+        <span class="roll-swatch" data-color="${c.color || fallbackColor}"></span>
         <span class="lb-cmd-name">${escapeHtml(cmdLabelOf(c))}</span>
-        <span class="lb-cmd-wins">${c.wins} ${c.wins === 1 ? 'win' : 'wins'}</span>
-      </div>`).join('');
-    // Per-table-size breakdown: one chip per game size that has wins (2P, 3P…),
-    // shown smallest table first so equal-size games line up for comparison.
+        <span class="lb-cmd-wins">${wins} ${wins === 1 ? 'win' : 'wins'}</span>
+      </div>`;
+}
+
+// OVERALL board: ranked by total wins, with each player's per-size chips and
+// full commander breakdown (all game sizes combined).
+function renderOverallBoard(profiles) {
+  const ranked = profiles.slice()
+    .filter(p => playerTotalWins(p) > 0)
+    .sort((a, b) => playerTotalWins(b) - playerTotalWins(a) || String(a.name).localeCompare(String(b.name)));
+  if (!ranked.length) {
+    return '<div class="lb-empty-size">No wins recorded yet.<br>Finish a game with a player whose name matches a saved profile and it shows up here.</div>';
+  }
+  return ranked.map((p, i) => {
+    const total = playerTotalWins(p);
+    const cmdRows = (p.commanders || []).slice()
+      .sort((a, b) => (b.wins || 0) - (a.wins || 0))
+      .filter(c => (c.wins || 0) > 0)
+      .map(c => lbCmdRow(c, p.color, c.wins)).join('');
     const buckets = sanitizeWinsByCount(p.winsByCount);
-    const sizeKeys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
-    const sizeChips = sizeKeys.map(n => {
+    const sizeChips = Object.keys(buckets).map(Number).sort((a, b) => a - b).map(n => {
       const w = buckets[n];
       return `<span class="lb-size-chip" title="${w} ${w === 1 ? 'win' : 'wins'} in ${n}-player games">
         <span class="lb-size-n">${n}P</span>
@@ -1877,16 +1929,66 @@ function renderLeaderboard() {
       : '';
     return `
       <div class="lb-player">
-        <div class="lb-row">
-          <span class="lb-rank">${medals[i] || (i + 1)}</span>
-          <span class="roll-swatch" data-color="${p.color}"></span>
-          <span class="lb-name">${escapeHtml(p.name)}</span>
-          <span class="lb-wins">${total} ${total === 1 ? 'win' : 'wins'}</span>
-        </div>
+        ${lbHeaderRow(p, i, total)}
         ${sizeRow}
         ${cmdRows ? `<div class="lb-cmd-list">${cmdRows}</div>` : ''}
       </div>`;
   }).join('');
+}
+
+// PER-SIZE board: only players with wins at exactly n players, ranked by those
+// wins. Commander rows show commander wins earned at this same size (captured
+// from v10.2.0 on — older wins have no size tag, so they only appear on Overall).
+function renderSizeBoard(profiles, n) {
+  const ranked = profiles
+    .map(p => ({ p, w: sizeWins(p, n) }))
+    .filter(x => x.w > 0)
+    .sort((a, b) => b.w - a.w || String(a.p.name).localeCompare(String(b.p.name)));
+  if (!ranked.length) {
+    return `<div class="lb-empty-size">No ${n}-player games recorded yet.<br>Wins from games with exactly ${n} players will rank here.</div>`;
+  }
+  return ranked.map((x, i) => {
+    const p = x.p;
+    const cmdRows = (p.commanders || [])
+      .map(c => ({ c, w: sanitizeWinsByCount(c.winsByCount)[n] || 0 }))
+      .filter(o => o.w > 0)
+      .sort((a, b) => b.w - a.w)
+      .map(o => lbCmdRow(o.c, p.color, o.w)).join('');
+    return `
+      <div class="lb-player">
+        ${lbHeaderRow(p, i, x.w)}
+        ${cmdRows ? `<div class="lb-cmd-list">${cmdRows}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function renderLeaderboard() {
+  const list = document.getElementById('lbList');
+  const tabs = document.getElementById('lbTabs');
+  if (!list) return;
+  const profiles = loadProfiles();
+
+  // Tab bar: Overall + one tab per table size 2..6, always shown so every game
+  // size has a home even before it has any recorded wins.
+  if (tabs) {
+    const tabDefs = [{ key: 'all', label: 'Overall' }]
+      .concat(LB_SIZES.map(n => ({ key: String(n), label: n + 'P' })));
+    tabs.innerHTML = tabDefs.map(t =>
+      `<button class="lb-tab${String(lbView) === t.key ? ' active' : ''}" data-lbview="${t.key}">${t.label}</button>`
+    ).join('');
+  }
+
+  if (profiles.length === 0) {
+    list.innerHTML = '<div class="profile-empty">No saved players yet. Save player setups as profiles, then their wins will show up here.</div>';
+    return;
+  }
+
+  if (lbView === 'all') {
+    list.innerHTML = renderOverallBoard(profiles);
+  } else {
+    const n = parseInt(lbView, 10);
+    list.innerHTML = `<div class="lb-section-title">${n}-Player Games</div>` + renderSizeBoard(profiles, n);
+  }
 }
 
 function renderProfileList() {
@@ -2194,11 +2296,19 @@ document.getElementById('btnRoll').addEventListener('click', openRollModal);
 
 /* ===== Leaderboard wiring ===== */
 document.getElementById('btnLeaderboard').addEventListener('click', () => {
+  lbView = 'all'; // always open on the Overall board
   renderLeaderboard();
   document.getElementById('leaderboardModal').classList.add('active');
 });
 document.getElementById('lbClose').addEventListener('click', () => {
   document.getElementById('leaderboardModal').classList.remove('active');
+});
+// Switch between the Overall board and the per-table-size boards (2P–6P).
+document.getElementById('lbTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.lb-tab');
+  if (!btn) return;
+  lbView = btn.dataset.lbview;
+  renderLeaderboard();
 });
 document.getElementById('lbReset').addEventListener('click', () => {
   if (!confirm('Reset all profile win counts to zero?')) return;
@@ -2206,7 +2316,7 @@ document.getElementById('lbReset').addEventListener('click', () => {
   profiles.forEach(p => {
     p.wins = 0;
     p.winsByCount = {};
-    (p.commanders || []).forEach(c => { c.wins = 0; });
+    (p.commanders || []).forEach(c => { c.wins = 0; c.winsByCount = {}; });
   });
   saveProfiles(profiles);
   renderLeaderboard();
@@ -2255,6 +2365,12 @@ function mergeProfiles(existing, incoming) {
       } else {
         ec.wins = Math.max(ec.wins || 0, ic.wins || 0);
         ec.color = ic.color || ec.color;
+        // Merge the commander's per-size buckets the same idempotent way.
+        const icCmdBuckets = sanitizeWinsByCount(ic.winsByCount);
+        ec.winsByCount = sanitizeWinsByCount(ec.winsByCount);
+        Object.keys(icCmdBuckets).forEach(k => {
+          ec.winsByCount[k] = Math.max(ec.winsByCount[k] || 0, icCmdBuckets[k]);
+        });
       }
     });
     // Merge table-size buckets the same idempotent way: keep the higher tally
@@ -2403,4 +2519,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 </script>
 </body>
 </html>
-<!-- BUILD-STAMP 2026-07-22 v10.1.0 — auto-scaling counters + wins-by-table-size -->
+<!-- BUILD-STAMP 2026-07-22 v10.2.0 — per-table-size win leaderboards (2P–6P + Overall) -->
