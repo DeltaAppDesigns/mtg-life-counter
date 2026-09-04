@@ -36,13 +36,30 @@
 
   /* ===== Player grid ===== */
   .grid { position: fixed; top: 48px; bottom: 0; left: 0; right: 0; display: grid; gap: 4px; padding: 4px; background: #000; }
-  .grid.p2 { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-  .grid.p3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-  .grid.p3 .player:nth-child(3) { grid-column: 1 / span 2; }
-  .grid.p4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-  .grid.p5 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
-  .grid.p5 .player:nth-child(5) { grid-column: 2 / span 1; }
-  .grid.p6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  /* Each tile is pinned to a named grid area (a..f) so the seating layouts in
+     LAYOUTS can place them freely. The per-layout grid-template rules are
+     injected at startup by buildLayoutStyles(). */
+  .grid .player:nth-child(1) { grid-area: a; }
+  .grid .player:nth-child(2) { grid-area: b; }
+  .grid .player:nth-child(3) { grid-area: c; }
+  .grid .player:nth-child(4) { grid-area: d; }
+  .grid .player:nth-child(5) { grid-area: e; }
+  .grid .player:nth-child(6) { grid-area: f; }
+
+  /* ===== Layout picker ===== */
+  .layout-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .layout-opt {
+    background: #0a0a0a; border: 2px solid #333; border-radius: 8px;
+    padding: 8px; cursor: pointer; text-align: center;
+  }
+  .layout-opt:hover { border-color: #555; }
+  .layout-opt.selected { border-color: #2563eb; background: #12203c; }
+  .layout-preview {
+    display: grid; gap: 3px; width: 100%; aspect-ratio: 4 / 3; margin-bottom: 6px;
+  }
+  .layout-preview span { background: #3a3a3a; border-radius: 3px; }
+  .layout-opt.selected .layout-preview span { background: #2563eb; }
+  .layout-opt .layout-name { font-size: 12px; color: #ccc; line-height: 1.3; }
 
   /* ===== Player tile ===== */
   .player {
@@ -588,6 +605,7 @@
   <div class="toolbar-right">
     <button class="tb-btn" id="btnRoll">🎲 Roll</button>
     <button class="tb-btn" id="btnLeaderboard">🏆 Wins</button>
+    <button class="tb-btn" id="btnLayout">▦ Layout</button>
     <button class="tb-btn" id="btnNewGame">↻ New Game</button>
     <button class="tb-btn" id="btnSettings">⚙️ Game Settings</button>
     <button class="tb-btn" id="btnInstall" style="display:none;">⬇️ Install App</button>
@@ -687,6 +705,11 @@
       </select>
     </div>
 
+    <div class="field">
+      <label id="setLayoutLabel">Table Layout</label>
+      <select id="setLayout"></select>
+    </div>
+
     <h3>Default Counters Shown</h3>
     <div class="counter-toggles" id="setCounters"></div>
 
@@ -695,7 +718,19 @@
       <button class="btn-primary" id="setApply">Apply & New Game</button>
     </div>
 
-    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.2.0</div>
+    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.3.0</div>
+  </div>
+</div>
+
+<!-- Table layout modal -->
+<div class="modal-backdrop" id="layoutModal">
+  <div class="modal">
+    <h2>▦ Table Layout</h2>
+    <p style="color:#999; font-size:13px; line-height:1.5; margin-bottom:14px;" id="layoutHint"></p>
+    <div class="layout-list" id="layoutList"></div>
+    <div class="modal-actions">
+      <button class="btn-primary" id="layoutClose">Done</button>
+    </div>
   </div>
 </div>
 
@@ -800,10 +835,85 @@ const FORMAT_DEFS = [
   { key: 'pauper',    label: 'Pauper',            life: 20, commander: false, cmdLethal: 21, teams: false },
 ];
 
+// ===== Table layouts =====
+// One entry per number of TILES on screen (players, or teams in Two-Headed
+// Giant). Each option describes a CSS grid: `cols`/`rows` are the track sizes
+// and `areas` places tiles a..f (a = player 1, b = player 2, ...). The first
+// option for each count is the default. buildLayoutStyles() turns these into
+// real CSS rules and the layout picker reuses them to draw the previews, so a
+// new seating arrangement only has to be described once, right here.
+const LAYOUTS = {
+  2: [
+    { key: 'rows', label: 'Stacked — 2 rows',        cols: '1fr',     rows: '1fr 1fr', areas: ['a', 'b'] },
+    { key: 'cols', label: 'Side by side — 2 columns', cols: '1fr 1fr', rows: '1fr',     areas: ['a b'] },
+  ],
+  3: [
+    { key: '2top1bottom', label: '2 top · 1 full-width bottom', cols: '1fr 1fr', rows: '1fr 1fr', areas: ['a b', 'c c'] },
+    { key: '1top2bottom', label: '1 full-width top · 2 bottom', cols: '1fr 1fr', rows: '1fr 1fr', areas: ['a a', 'b c'] },
+    { key: '1left2right', label: '1 full-height left · 2 right', cols: '1fr 1fr', rows: '1fr 1fr', areas: ['a b', 'a c'] },
+    { key: '2left1right', label: '2 left · 1 full-height right', cols: '1fr 1fr', rows: '1fr 1fr', areas: ['a c', 'b c'] },
+    { key: 'rows', label: '3 full-width rows',   cols: '1fr', rows: '1fr 1fr 1fr', areas: ['a', 'b', 'c'] },
+    { key: 'cols', label: '3 full-height columns', cols: '1fr 1fr 1fr', rows: '1fr', areas: ['a b c'] },
+  ],
+  4: [
+    { key: 'quad',  label: '2×2 corners', cols: '1fr 1fr', rows: '1fr 1fr', areas: ['a b', 'c d'] },
+    { key: 'ends',  label: '1 each end (top & bottom) · 2 in the middle', cols: '1fr 1fr', rows: '1fr 1fr 1fr', areas: ['a a', 'b c', 'd d'] },
+    { key: 'sides', label: '1 each side (left & right) · 2 in the middle', cols: '1fr 1fr 1fr', rows: '1fr 1fr', areas: ['a b d', 'a c d'] },
+    { key: 'rows',  label: '4 full-width rows',    cols: '1fr', rows: '1fr 1fr 1fr 1fr', areas: ['a', 'b', 'c', 'd'] },
+    { key: 'cols',  label: '4 full-height columns', cols: '1fr 1fr 1fr 1fr', rows: '1fr', areas: ['a b c d'] },
+  ],
+  5: [
+    { key: '3top2bottom', label: '3 top · 2 bottom', cols: 'repeat(6, 1fr)', rows: '1fr 1fr', areas: ['a a b b c c', 'd d d e e e'] },
+    { key: '2top3bottom', label: '2 top · 3 bottom', cols: 'repeat(6, 1fr)', rows: '1fr 1fr', areas: ['a a a b b b', 'c c d d e e'] },
+    { key: '4up1bottom',  label: '2×2 · 1 full-width bottom', cols: '1fr 1fr', rows: '1fr 1fr 1fr', areas: ['a b', 'c d', 'e e'] },
+    { key: '1top4down',   label: '1 full-width top · 2×2 below', cols: '1fr 1fr', rows: '1fr 1fr 1fr', areas: ['a a', 'b c', 'd e'] },
+    { key: '1left4right', label: '1 full-height left · 2×2 right', cols: '1fr 1fr 1fr', rows: '1fr 1fr', areas: ['a b c', 'a d e'] },
+    { key: 'rows', label: '5 full-width rows',    cols: '1fr', rows: 'repeat(5, 1fr)', areas: ['a', 'b', 'c', 'd', 'e'] },
+    { key: 'cols', label: '5 full-height columns', cols: 'repeat(5, 1fr)', rows: '1fr', areas: ['a b c d e'] },
+  ],
+  6: [
+    { key: '3x2',   label: '3 across · 2 rows', cols: '1fr 1fr 1fr', rows: '1fr 1fr', areas: ['a b c', 'd e f'] },
+    { key: '2x3',   label: '2 across · 3 rows', cols: '1fr 1fr', rows: '1fr 1fr 1fr', areas: ['a b', 'c d', 'e f'] },
+    { key: 'ends',  label: '1 each end · 2×2 in the middle', cols: '1fr 1fr', rows: 'repeat(4, 1fr)', areas: ['a a', 'b c', 'd e', 'f f'] },
+    { key: 'sides', label: '1 each side · 2×2 in the middle', cols: 'repeat(4, 1fr)', rows: '1fr 1fr', areas: ['a b c f', 'a d e f'] },
+    { key: 'rows',  label: '6 full-width rows',    cols: '1fr', rows: 'repeat(6, 1fr)', areas: ['a', 'b', 'c', 'd', 'e', 'f'] },
+    { key: 'cols',  label: '6 full-height columns', cols: 'repeat(6, 1fr)', rows: '1fr', areas: ['a b c d e f'] },
+  ],
+};
+
+function layoutsFor(count) { return LAYOUTS[count] || LAYOUTS[4]; }
+function defaultLayoutKey(count) { return layoutsFor(count)[0].key; }
+
+// The chosen layout is remembered per tile count, so switching between a
+// 3-player and a 4-player game keeps each one's preferred seating.
+function layoutKeyFor(count) {
+  const opts = layoutsFor(count);
+  const key = state.layouts[count];
+  return opts.some(o => o.key === key) ? key : opts[0].key;
+}
+function setLayoutKey(count, key) { state.layouts[count] = key; }
+
+function layoutCss(selector, opt) {
+  return selector + ' { grid-template-columns: ' + opt.cols + '; grid-template-rows: ' + opt.rows
+    + '; grid-template-areas: ' + opt.areas.map(r => '"' + r + '"').join(' ') + '; }';
+}
+
+// Emit one CSS rule per (tile count, layout) pair, e.g. `.grid.p4.lay-ends`.
+function buildLayoutStyles() {
+  const rules = [];
+  Object.keys(LAYOUTS).forEach(count => {
+    LAYOUTS[count].forEach(opt => rules.push(layoutCss('.grid.p' + count + '.lay-' + opt.key, opt)));
+  });
+  const st = document.createElement('style');
+  st.textContent = rules.join('\n');
+  document.head.appendChild(st);
+}
+
 const state = {
   playerCount: 4,
   format: 'commander',
   startLife: 40,
+  layouts: { 2: 'rows', 3: '2top1bottom', 4: 'quad', 5: '3top2bottom', 6: '3x2' },
   defaultCounters: { poison: true, energy: false, exp: false },
   players: [],
   activeModalPlayer: null,
@@ -901,6 +1011,7 @@ function save() {
       playerCount: state.playerCount,
       format: state.format,
       startLife: state.startLife,
+      layouts: state.layouts,
       defaultCounters: state.defaultCounters,
       winCredited: state.winCredited,
       players: state.players.map(p => ({
@@ -923,6 +1034,11 @@ function load() {
     state.format = (s.format && FORMAT_DEFS.some(f => f.key === s.format)) ? s.format : 'commander';
     state.startLife = s.startLife || formatDef().life;
     state.winCredited = s.winCredited || null;
+    state.layouts = { ...state.layouts, ...(s.layouts || {}) };
+    // Drop any saved layout key that no longer exists for that player count
+    Object.keys(state.layouts).forEach(c => {
+      if (!layoutsFor(c).some(o => o.key === state.layouts[c])) state.layouts[c] = defaultLayoutKey(c);
+    });
     state.defaultCounters = { poison: true, energy: false, exp: false, ...(s.defaultCounters || {}) };
     // Drop any legacy keys
     delete state.defaultCounters.storm;
@@ -984,7 +1100,7 @@ function render() {
   // In Two-Headed Giant we draw ONE combined tile per team; every other format
   // draws one tile per player.
   const tileCount = isTwoHeaded() ? teams.length : state.playerCount;
-  grid.className = 'grid p' + tileCount;
+  grid.className = 'grid p' + tileCount + ' lay-' + layoutKeyFor(tileCount);
   grid.innerHTML = '';
 
   const teamDead = teams.map(team => team.some(i => isPlayerDead(state.players[i])));
@@ -1640,6 +1756,42 @@ document.getElementById('pmReset').addEventListener('click', () => {
   render(); save(); renderPlayerModal();
 });
 
+/* Layout picker — changes seating mid-game without resetting anything */
+function renderLayoutPicker() {
+  const count = currentTileCount();
+  const active = layoutKeyFor(count);
+  const hint = document.getElementById('layoutHint');
+  hint.textContent = isTwoHeaded()
+    ? `Choose how the ${count} team tiles are arranged on screen.`
+    : `Choose how the ${count} player tiles are arranged on screen.`;
+
+  document.getElementById('layoutList').innerHTML = layoutsFor(count).map(o => {
+    const preview = `grid-template-columns:${o.cols};grid-template-rows:${o.rows};`
+      + `grid-template-areas:${o.areas.map(r => '"' + r + '"').join(' ')};`;
+    const cells = o.areas.join(' ').split(/\s+/)
+      .filter((v, i, arr) => v !== '.' && arr.indexOf(v) === i)
+      .map(a => `<span style="grid-area:${a}"></span>`).join('');
+    return `<div class="layout-opt ${o.key === active ? 'selected' : ''}" data-layout="${o.key}">
+      <div class="layout-preview" style="${preview}">${cells}</div>
+      <div class="layout-name">${escapeHtml(o.label)}</div>
+    </div>`;
+  }).join('');
+}
+document.getElementById('btnLayout').addEventListener('click', () => {
+  renderLayoutPicker();
+  document.getElementById('layoutModal').classList.add('active');
+});
+document.getElementById('layoutList').addEventListener('click', (e) => {
+  const opt = e.target.closest('.layout-opt');
+  if (!opt) return;
+  setLayoutKey(currentTileCount(), opt.dataset.layout);
+  render(); save();
+  renderLayoutPicker();
+});
+document.getElementById('layoutClose').addEventListener('click', () => {
+  document.getElementById('layoutModal').classList.remove('active');
+});
+
 /* Settings modal */
 // Reads the dropdown's currently-selected format (NOT state.format) so the note
 // previews the pending choice without committing it until Apply is pressed.
@@ -1674,14 +1826,44 @@ function updatePlayerCountChooser() {
     sel.value = Math.max(2, Math.min(6, state.playerCount || 4));
   }
 }
+
+// Number of TILES the pending settings will draw: teams in Two-Headed Giant,
+// players everywhere else — which is exactly what the count dropdown holds.
+function pendingTileCount() {
+  return parseInt(document.getElementById('setPlayerCount').value) || 4;
+}
+function currentTileCount() {
+  return isTwoHeaded() ? Math.max(1, Math.round(state.playerCount / 2)) : state.playerCount;
+}
+
+// Fills the settings modal's layout dropdown with the arrangements available
+// for the pending tile count.
+function updateLayoutChooser() {
+  const count = pendingTileCount();
+  const sel = document.getElementById('setLayout');
+  const label = document.getElementById('setLayoutLabel');
+  label.textContent = isTwoHeadedPending() ? 'Table Layout (one tile per team)' : 'Table Layout';
+  sel.innerHTML = layoutsFor(count).map(o =>
+    `<option value="${o.key}">${escapeHtml(o.label)}</option>`).join('');
+  sel.value = layoutKeyFor(count);
+}
+function isTwoHeadedPending() {
+  const key = document.getElementById('setFormat').value;
+  const f = FORMAT_DEFS.find(x => x.key === key) || FORMAT_DEFS[0];
+  return !!f.teams;
+}
+
 document.getElementById('setFormat').addEventListener('change', () => {
   updateFormatNote();
   updatePlayerCountChooser();
+  updateLayoutChooser();
 });
+document.getElementById('setPlayerCount').addEventListener('change', updateLayoutChooser);
 document.getElementById('btnSettings').addEventListener('click', () => {
   document.getElementById('setFormat').value = state.format;
   updatePlayerCountChooser();
   updateFormatNote();
+  updateLayoutChooser();
   const sc = document.getElementById('setCounters');
   sc.innerHTML = COUNTER_DEFS.map(d => `
     <label class="ctog"><input type="checkbox" data-counter="${d.key}" ${state.defaultCounters[d.key] ? 'checked' : ''}> ${d.label}</label>
@@ -1693,6 +1875,7 @@ document.getElementById('setCancel').addEventListener('click', () => {
 });
 document.getElementById('setApply').addEventListener('click', () => {
   state.format = document.getElementById('setFormat').value;
+  setLayoutKey(pendingTileCount(), document.getElementById('setLayout').value);
   let pc = parseInt(document.getElementById('setPlayerCount').value);
   // In Two-Headed Giant the dropdown value is the number of TEAMS — each team is
   // two players, so the actual player count is teams × 2.
@@ -2454,6 +2637,7 @@ document.querySelectorAll('.modal-backdrop').forEach(bd => {
 });
 
 /* Init */
+buildLayoutStyles();
 if (!load()) initPlayers();
 render();
 
@@ -2519,4 +2703,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 </script>
 </body>
 </html>
-<!-- BUILD-STAMP 2026-07-22 v10.2.0 — per-table-size win leaderboards (2P–6P + Overall) -->
+<!-- BUILD-STAMP 2026-09-04 v10.3.0 — selectable table layouts for 2–6 players -->

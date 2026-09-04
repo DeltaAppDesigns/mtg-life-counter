@@ -109,6 +109,23 @@ If you ever want to change the app:
 
 ---
 
+## What's new in v10.3.0 (2026-09-04)
+
+- **Pick your table layout.** A new **▦ Layout** button in the toolbar lets you
+  choose how the player tiles are arranged, with a visual preview of each option.
+  Tap a layout and the table rearranges instantly — no new game, no lost life
+  totals.
+- **No more wasted corner for odd player counts.** 3 players can be 2 top + 1
+  full-width bottom, 1 full-width top + 2 bottom, one full-height side plus two
+  stacked, or 3 straight rows/columns. 5 players get 3+2, 2+3, a 2x2 with a
+  full-width fifth, and more.
+- **Match the real table.** 4 players can stay 2x2 corners, or become 1 player at
+  each end with 2 in the middle (or 1 on each side with 2 in the middle) for
+  long-table seating. 6 players and Two-Headed Giant team tiles have the same
+  choices.
+- **Remembered per table size.** Your pick for a 3-player game is kept separately
+  from your 4-player pick, and both survive closing the app.
+
 ## What's new in v10.2.0 (2026-07-22)
 
 - **Separate leaderboards for every table size.** The Wins screen now has tabs —
@@ -128,4 +145,4 @@ If you ever want to change the app:
   wins down by how many people were in the game (2P, 3P, 4P…), so occasional
   players in bigger games can be compared fairly against a pair who play a lot
   of two-player games.
-<!-- BUILD-STAMP 2026-07-22 v10.2.0 -->
+<!-- BUILD-STAMP 2026-09-04 v10.3.0 -->

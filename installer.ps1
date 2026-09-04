@@ -48,4 +48,4 @@ Write-Host '  Done!' -ForegroundColor Green
 Write-Host ('  A "MTG Life Counter" shortcut is now on your Desktop.')
 Write-Host '  Double-click it to launch the app fullscreen. (Press F11 to exit fullscreen.)'
 Write-Host ''
-# BUILD-STAMP 2026-07-22 v10.2.0
+# BUILD-STAMP 2026-09-04 v10.3.0
