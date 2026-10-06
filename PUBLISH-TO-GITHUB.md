@@ -42,7 +42,7 @@ like a real app — full screen, its own icon, works offline.
 1. On the new repository page, click the link **uploading an existing file**
    (it's in the line "…or upload an existing file" near the middle).
    - If you don't see it: click **Add file** → **Upload files**.
-2. Open the **`mtg-life-counter-app`** folder on your computer.
+2. Open the **`MTG-Life-Counter-PWA-v10.4.0`** folder on your computer.
 3. Select **everything inside it** and drag it all into the upload box.
    - Make sure you grab the contents, not the folder itself — `index.html`
      must end up at the top level of the repository.
@@ -109,6 +109,40 @@ If you ever want to change the app:
 
 ---
 
+## What's new in v10.4.0 (2026-10-06)
+
+- **Oathbreaker:** 20 life, one planeswalker and one instant/sorcery Signature
+  Spell. Their +2 command-zone taxes are independent. No commander-damage
+  controls or damage defeat condition. Rules reminder covers 60 total / 58
+  maindeck, singleton except basics, color identity, and the requirement to
+  control your Oathbreaker before casting your Signature Spell.
+- **Format-aware profiles:** Oathbreaker pairs are saved separately from
+  commanders and partners. Existing commanders and win history are retained;
+  export/import includes both setup types. Standard / Legacy and Pauper profile
+  chips select only the player's name and color, with no commander list.
+- **Counters fit both dimensions:** bottom controls refit after layout,
+  orientation, rotation and tile resizing, without counter-area scrolling.
+  Long labels use ellipsis; full names remain in settings and tooltips. Extremely
+  dense seating (e.g. six narrow columns on a phone with all partners/counters)
+  necessarily produces smaller controls: choose a roomier layout for touch use.
+- **One scrolling settings surface:** saved profiles and expanded setups grow
+  naturally inside the player modal; only the whole modal scrolls.
+- **Layout picker retained and repaired:** previews render named grid areas
+  correctly; layout choices are keyboard-operable buttons.
+- **Update-safe deployment:** upload all files, including `index.html` and
+  `sw.js`, to the **same repository/path**. Reopen online to receive v10.4.0,
+  then reopen once more if an older service worker still controls the first
+  session. Existing localStorage keys are unchanged. Export profiles before
+  moving to another hostname, browser or device; browser storage does not travel
+  with this ZIP. No packages or build step required.
+
+Rules references: https://oathbreakermtg.org/quick-rules/ and
+https://oathbreakermtg.org/rules/ (906.8, 906.9, 906.11);
+https://mtg.wiki/page/Oathbreaker (no commander damage).
+This is a life/tax tracker, not a deck validator or casting rules engine.
+
+Validation: all three inline scripts and the service worker passed JavaScript syntax checks. Fifteen grouped virtual-DOM interaction/logic tests passed, covering state reload, independent taxes, saved setups and win history, profile merge idempotence, player-only Standard/Legacy/Pauper selection, all 2–6 player layouts and rotations, 2/3 team rendering, and two-axis fitting calculations. HTML IDs, packaged asset paths and ZIP integrity were also checked. No real browser engine was installed, so physical phone/tablet/desktop rendering, touch target sizes, installation and offline behavior were not device-tested. After publishing, spot-check your device and choose roomier seating for dense tables.
+
 ## What's new in v10.3.0 (2026-09-04)
 
 - **Pick your table layout.** A new **▦ Layout** button in the toolbar lets you
@@ -145,4 +179,4 @@ If you ever want to change the app:
   wins down by how many people were in the game (2P, 3P, 4P…), so occasional
   players in bigger games can be compared fairly against a pair who play a lot
   of two-player games.
-<!-- BUILD-STAMP 2026-09-04 v10.3.0 -->
+<!-- BUILD-STAMP 2026-10-06 v10.4.0 -->

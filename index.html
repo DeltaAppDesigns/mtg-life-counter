@@ -63,6 +63,7 @@
 
   /* ===== Player tile ===== */
   .player {
+    min-width: 0; min-height: 0;
     position: relative; border-radius: 12px; overflow: hidden;
     transition: filter 0.3s ease;
   }
@@ -114,7 +115,7 @@
     width: 100%; height: 100%;
     display: flex; flex-direction: column;
     transform-origin: center center;
-    transition: transform 0.25s ease;
+    transition: none;
   }
   .player[data-rotation="180"] .p-content { transform: rotate(180deg); }
   .player[data-rotation="90"] .p-content,
@@ -220,11 +221,12 @@
     display: flex; flex-wrap: wrap; gap: calc(var(--u) * 0.5);
     padding: calc(var(--u) * 0.55);
     background: rgba(0,0,0,0.35); justify-content: center; align-content: flex-start;
-    max-height: 62%; overflow-y: auto;
+    flex: 0 0 auto; max-height: 62%; min-height: 0; overflow: hidden;
   }
   .counter {
     display: flex; align-items: center; gap: calc(var(--u) * 0.35);
-    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.4); border: calc(var(--cscale) * 1px) solid rgba(255,255,255,0.15);
+    max-width: 100%; min-width: 0; flex-shrink: 0;
     padding: calc(var(--u) * 0.3) calc(var(--u) * 0.42);
     border-radius: calc(var(--u) * 1.2); font-size: var(--u);
     transition: background 0.15s;
@@ -232,7 +234,7 @@
   .counter:hover { background: rgba(0,0,0,0.6); }
   .counter .icon { font-size: calc(var(--u) * 1.15); margin: 0 calc(var(--u) * 0.12); }
   .counter .val { font-weight: 700; min-width: calc(var(--u) * 1.6); text-align: center; font-size: calc(var(--u) * 1.1); }
-  .counter .label-sub { font-size: calc(var(--u) * 0.76); opacity: 0.85; margin: 0 calc(var(--u) * 0.18); white-space: nowrap; }
+  .counter .label-sub { font-size: calc(var(--u) * 0.76); opacity: 0.85; margin: 0 calc(var(--u) * 0.18); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: calc(var(--u) * 8); }
   .cnt-btn {
     background: rgba(255,255,255,0.2); border: none; color: inherit;
     width: calc(var(--u) * 1.75); height: calc(var(--u) * 1.75); border-radius: 50%;
@@ -281,8 +283,25 @@
   .tc-col-head .p-name:focus { background: rgba(255,255,255,0.15); }
   .tc-col-head .p-menu-btn { width: 28px; height: 28px; font-size: 16px; }
   .tc-col .counters {
-    flex: 1; align-content: flex-start; max-height: none; overflow-y: auto;
-    background: transparent; padding: 8px;
+    flex: 1; align-content: flex-start; max-height: none; overflow: hidden;
+    background: transparent; padding: calc(var(--u) * 0.47);
+  }
+
+  /* Fit the whole tile, not just its counters, in compact seating layouts. */
+  .p-header { flex-shrink: 0; padding: min(8px, 3cqh) min(12px, 3cqw); }
+  .p-content { container-type: size; }
+  .p-header .p-menu-btn { width: min(32px, 18cqh); height: min(32px, 18cqh); }
+  .p-header .p-name { font-size: min(16px, 10cqh); padding-block: min(4px, 2cqh); }
+  .p-content .life-display { font-size: min(110px, 30cqh, 32cqw); }
+  .team-tile .life-area { padding: 0; }
+  .team-tile .life-display { font-size: min(80px, 24cqh, 28cqw); }
+  .tc-col-head { padding: min(6px, 2cqh) min(8px, 2cqw); gap: min(6px, 2cqw); }
+  .tc-col-head .p-name { font-size: min(15px, 8cqh); max-width: none; }
+  .tc-col-head .p-menu-btn { width: min(28px, 14cqh); height: min(28px, 14cqh); }
+  .team-cols { padding: min(4px, 1cqh); }
+  @media (max-width: 600px) {
+    .toolbar-right { gap: 3px; }
+    .toolbar .tb-btn { padding: 5px 4px; font-size: 11px; }
   }
 
   /* ===== Modal ===== */
@@ -293,7 +312,7 @@
   .modal-backdrop.active { display: flex; }
   .modal {
     background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
-    padding: 24px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto;
+    padding: 24px; max-width: 520px; width: 100%; max-height: min(90dvh, calc(100dvh - 40px)); overflow-y: auto; overscroll-behavior: contain;
   }
   .modal h2 { font-size: 18px; margin-bottom: 16px; }
   .modal h3 { font-size: 13px; margin: 18px 0 8px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
@@ -449,7 +468,7 @@
   /* ===== Profiles ===== */
   .profile-list {
     display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
-    max-height: 140px; overflow-y: auto;
+    max-height: none; overflow: visible;
   }
   .profile-chip {
     display: inline-flex; align-items: center; gap: 6px;
@@ -662,6 +681,14 @@
       <div id="pmTaxList"></div>
     </div>
 
+    <div id="pmOathbreakerSetup" style="display:none;">
+      <h3>Oathbreaker &amp; Signature Spell</h3>
+      <p style="color:#bbb;font-size:12px;line-height:1.5;margin-bottom:12px;">20 starting life. Exactly 60 cards: one planeswalker Oathbreaker, one instant/sorcery Signature Spell, and 58 maindeck cards. Singleton except basic lands; all cards follow the Oathbreaker's color identity. Each command-zone card has its own +2 tax per previous cast. Cast your Signature Spell only while your own Oathbreaker is on the battlefield. No commander damage.</p>
+      <div id="pmOathbreakerNames"></div>
+      <h3>Independent Command-zone Taxes</h3>
+      <div id="pmOathbreakerTax"></div>
+    </div>
+
     <h3>Counters</h3>
     <div class="counter-toggles" id="pmCounters"></div>
 
@@ -689,6 +716,7 @@
         <option value="twoheaded">Two-Headed Giant</option>
         <option value="standard">Standard / Legacy</option>
         <option value="brawl">Brawl</option>
+        <option value="oathbreaker">Oathbreaker</option>
         <option value="pauper">Pauper</option>
       </select>
       <div id="setFormatNote" style="color:#999; font-size:12px; margin-top:6px; line-height:1.4;"></div>
@@ -718,7 +746,7 @@
       <button class="btn-primary" id="setApply">Apply & New Game</button>
     </div>
 
-    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.3.0</div>
+    <div style="text-align:center; color:#666; font-size:11px; margin-top:14px;">MTG Life Counter &middot; v10.4.0</div>
   </div>
 </div>
 
@@ -781,7 +809,7 @@
     <div class="lb-tabs" id="lbTabs"></div>
     <div id="lbList"></div>
     <p style="color:#777; font-size:12px; margin:14px 0 0; line-height:1.4;">
-      Export saves all your players, commanders & wins to a file. Import merges that file into this device — safe to run more than once (it never double-counts wins).
+      Export saves all your players, commanders, Oathbreaker setups & wins to a file. Import merges that file into this device — safe to run more than once (it never double-counts wins).
     </p>
     <div class="modal-actions" style="flex-wrap: wrap;">
       <button class="btn-secondary btn-danger" id="lbReset">Reset Wins</button>
@@ -832,6 +860,7 @@ const FORMAT_DEFS = [
   { key: 'twoheaded', label: 'Two-Headed Giant',  life: 60, commander: true,  cmdLethal: 31, teams: true  },
   { key: 'standard',  label: 'Standard / Legacy', life: 20, commander: false, cmdLethal: 21, teams: false },
   { key: 'brawl',     label: 'Brawl',             life: 25, commander: true,  cmdLethal: 21, teams: false },
+  { key: 'oathbreaker', label: 'Oathbreaker', life: 20, commander: false, cmdLethal: null, teams: false, oathbreaker: true },
   { key: 'pauper',    label: 'Pauper',            life: 20, commander: false, cmdLethal: 21, teams: false },
 ];
 
@@ -924,6 +953,7 @@ function formatDef() {
   return FORMAT_DEFS.find(f => f.key === state.format) || FORMAT_DEFS[0];
 }
 function formatHasCommander() { return formatDef().commander; }
+function isOathbreaker() { return !!formatDef().oathbreaker; }
 function isTwoHeaded()        { return !!formatDef().teams; }
 function cmdLethal()          { return formatDef().cmdLethal; }
 
@@ -955,6 +985,7 @@ function teamLabelOf(idx) {
 // player. Commander formats use the player's real commanders; commander-less
 // formats fall back to the format label as a synthetic single "commander".
 function winCmdInfo(p) {
+  if (isOathbreaker()) return { names: p.oathbreakerNames, count: 2 };
   if (formatHasCommander()) {
     return { names: p.commanderNames, count: p.commanderCount };
   }
@@ -974,6 +1005,8 @@ function defaultPlayer(i) {
     commanderCount: 1,
     commanderNames: ['Commander', 'Partner'],
     commanderTax: [0, 0],
+    oathbreakerNames: ['Oathbreaker', 'Signature Spell'],
+    oathbreakerTax: [0, 0],
     // commanderDmg[opponentIdx] = [dmgFromTheirCmd1, dmgFromTheirCmd2]
     commanderDmg: {},
     showCommander: formatHasCommander(),
@@ -1019,6 +1052,7 @@ function save() {
         counters: p.counters, counterValues: p.counterValues,
         commanderCount: p.commanderCount, commanderNames: p.commanderNames,
         commanderTax: p.commanderTax,
+        oathbreakerNames: p.oathbreakerNames, oathbreakerTax: p.oathbreakerTax,
         commanderDmg: p.commanderDmg, showCommander: p.showCommander,
       })),
     }));
@@ -1055,6 +1089,8 @@ function load() {
       commanderCount: p.commanderCount || 1,
       commanderNames: p.commanderNames || ['Commander', 'Partner'],
       commanderTax: Array.isArray(p.commanderTax) ? p.commanderTax.slice(0,2).concat([0,0]).slice(0,2) : [0, 0],
+      oathbreakerNames: Array.isArray(p.oathbreakerNames) ? p.oathbreakerNames.slice(0,2).concat(['Oathbreaker','Signature Spell']).slice(0,2) : ['Oathbreaker','Signature Spell'],
+      oathbreakerTax: Array.isArray(p.oathbreakerTax) ? p.oathbreakerTax.slice(0,2).concat([0,0]).slice(0,2) : [0,0],
       commanderDmg: p.commanderDmg || {},
       showCommander: p.showCommander !== false,
     }));
@@ -1080,7 +1116,7 @@ function load() {
 function isPlayerDead(p) {
   if (p.life <= 0) return true;
   if (p.counters.poison && p.counterValues.poison >= 10) return true;
-  if (p.commanderDmg) {
+  if (formatHasCommander() && p.commanderDmg) {
     for (const k in p.commanderDmg) {
       const arr = p.commanderDmg[k];
       if (Array.isArray(arr) && arr.some(v => (v || 0) >= cmdLethal())) return true;
@@ -1273,6 +1309,17 @@ function renderCounters(p, idx) {
     </div>`;
   }
 
+  if (isOathbreaker()) {
+    p.oathbreakerNames.forEach((name, ci) => {
+      const role = ci === 0 ? 'Oathbreaker' : 'Signature Spell';
+      html += `<div class="counter tax" data-tax-idx="${idx}" data-ci="${ci}" title="${escapeHtml(role + ': ' + name)} — independent tax (±2)">
+        <button class="cnt-btn" data-tax-act="dec" aria-label="Decrease ${role} tax">−</button>
+        <span class="icon">${ci === 0 ? '🔮' : '📜'}</span><span class="val">${p.oathbreakerTax[ci] || 0}</span>
+        <span class="label-sub">${escapeHtml(name || role)}</span>
+        <button class="cnt-btn" data-tax-act="inc" aria-label="Increase ${role} tax">+</button></div>`;
+    });
+  }
+
   // Standard counters
   COUNTER_DEFS.forEach(def => {
     if (!p.counters[def.key]) return;
@@ -1293,37 +1340,44 @@ function escapeHtml(s) {
 }
 
 let resizeObs = null;
+let fitFrame = null;
+function scheduleCounterFit() {
+  if (fitFrame !== null) return;
+  fitFrame = requestAnimationFrame(() => { fitFrame = null; fitCounters(); });
+}
+function setRotationDims(tile) {
+  tile.style.setProperty('--tile-w', tile.clientWidth + 'px');
+  tile.style.setProperty('--tile-h', tile.clientHeight + 'px');
+}
 function syncRotationDims() {
-  // Set CSS vars so 90/270-rotated content can swap dimensions correctly
-  if (!resizeObs) {
-    resizeObs = new ResizeObserver(entries => {
-      entries.forEach(e => {
-        const tile = e.target;
-        tile.style.setProperty('--tile-w', e.contentRect.width + 'px');
-        tile.style.setProperty('--tile-h', e.contentRect.height + 'px');
-      });
-    });
-  } else {
-    resizeObs.disconnect();
-  }
-  document.querySelectorAll('.player').forEach(t => resizeObs.observe(t));
+  if (!resizeObs) resizeObs = new ResizeObserver(entries => {
+    entries.forEach(e => setRotationDims(e.target));
+    scheduleCounterFit();
+  });
+  resizeObs.disconnect();
+  document.querySelectorAll('.player').forEach(tile => {
+    setRotationDims(tile);
+    resizeObs.observe(tile);
+  });
+  scheduleCounterFit();
 }
 
-// Shrink each tile's counter bubbles just enough that they all fit without a
-// scrollbar. The counter CSS multiplies every dimension by a per-tile --cscale;
-// we start at full size and step it down only while the bubbles overflow their
-// (capped) area. With a full table of opponents adding commander-damage bubbles
-// the whole cluster scales down to stay visible instead of forcing a scroll.
+// Binary-search the largest scale that fits BOTH axes. Labels are bounded and
+// ellipsized (full names remain in tooltips/settings) rather than shrinking an
+// entire table for one long name. No scroll fallback or observer on scaled boxes.
 function fitCounters() {
   document.querySelectorAll('.counters').forEach(box => {
-    box.style.setProperty('--cscale', '1');
-    let scale = 1;
-    // Guard bounds the loop; 0.5 is the smallest we shrink before letting the
-    // rare extreme case (e.g. 6 players all running partners) fall back to scroll.
-    for (let guard = 0; guard < 12 && scale > 0.5 && box.scrollHeight > box.clientHeight + 1; guard++) {
-      scale = Math.max(0.5, scale - 0.06);
-      box.style.setProperty('--cscale', scale.toFixed(2));
+    const fits = scale => {
+      box.style.setProperty('--cscale', String(scale));
+      return box.scrollHeight <= box.clientHeight + 1 && box.scrollWidth <= box.clientWidth + 1;
+    };
+    if (fits(1)) return;
+    let low = 0.01, high = 1;
+    for (let i = 0; i < 12; i++) {
+      const mid = (low + high) / 2;
+      if (fits(mid)) low = mid; else high = mid;
     }
+    fits(Math.max(0.01, low - 0.002));
   });
 }
 
@@ -1553,11 +1607,14 @@ function changeCounter(idx, key, delta) {
 
 function changeTax(idx, ci, delta) {
   const p = state.players[idx];
-  p.commanderTax[ci] = Math.max(0, (p.commanderTax[ci] || 0) + delta);
+  const taxes = isOathbreaker() ? p.oathbreakerTax : p.commanderTax;
+  taxes[ci] = Math.max(0, (taxes[ci] || 0) + delta);
+  if (state.activeModalPlayer === idx) renderPlayerModal();
   render(); save();
 }
 
 function changeCommanderDmg(targetIdx, fromIdx, cmdSlot, delta) {
+  if (!formatHasCommander()) return;
   const p = state.players[targetIdx];
   if (!Array.isArray(p.commanderDmg[fromIdx])) p.commanderDmg[fromIdx] = [0, 0];
   const before = p.commanderDmg[fromIdx][cmdSlot] || 0;
@@ -1598,6 +1655,24 @@ function renderPlayerModal() {
   const hasCmd = formatHasCommander();
   const cmdSetup = document.getElementById('pmCommanderSetup');
   if (cmdSetup) cmdSetup.style.display = hasCmd ? '' : 'none';
+
+  const obSetup = document.getElementById('pmOathbreakerSetup');
+  obSetup.style.display = isOathbreaker() ? '' : 'none';
+  document.getElementById('pmOathbreakerNames').innerHTML = '';
+  document.getElementById('pmOathbreakerTax').innerHTML = '';
+  if (isOathbreaker()) p.oathbreakerNames.forEach((name, ci) => {
+    const role = ci === 0 ? 'Oathbreaker (planeswalker)' : 'Signature Spell (instant or sorcery)';
+    const field = document.createElement('div');
+    field.className = 'field';
+    field.innerHTML = `<label>${role}</label><input type="text" maxlength="60" value="${escapeHtml(name)}">`;
+    field.querySelector('input').oninput = e => { p.oathbreakerNames[ci] = e.target.value; save(); render(); };
+    document.getElementById('pmOathbreakerNames').appendChild(field);
+    const row = document.createElement('div');
+    row.className = 'tax-row';
+    row.innerHTML = `<div class="clabel">${ci === 0 ? 'Oathbreaker' : 'Signature Spell'} tax</div><div class="vctrl"><button aria-label="Decrease ${role} tax">−</button><span class="vnum">${p.oathbreakerTax[ci]}</span><button aria-label="Increase ${role} tax">+</button></div>`;
+    row.querySelectorAll('button').forEach((btn, i) => btn.onclick = () => changeTax(idx, ci, i ? 2 : -2));
+    document.getElementById('pmOathbreakerTax').appendChild(row);
+  });
 
   // Profiles
   renderProfileList();
@@ -1753,6 +1828,7 @@ document.getElementById('pmReset').addEventListener('click', () => {
   Object.keys(p.counterValues).forEach(k => p.counterValues[k] = 0);
   Object.keys(p.commanderDmg).forEach(k => p.commanderDmg[k] = [0, 0]);
   p.commanderTax = [0, 0];
+  p.oathbreakerTax = [0, 0];
   render(); save(); renderPlayerModal();
 });
 
@@ -1771,10 +1847,10 @@ function renderLayoutPicker() {
     const cells = o.areas.join(' ').split(/\s+/)
       .filter((v, i, arr) => v !== '.' && arr.indexOf(v) === i)
       .map(a => `<span style="grid-area:${a}"></span>`).join('');
-    return `<div class="layout-opt ${o.key === active ? 'selected' : ''}" data-layout="${o.key}">
-      <div class="layout-preview" style="${preview}">${cells}</div>
+    return `<button type="button" class="layout-opt ${o.key === active ? 'selected' : ''}" data-layout="${o.key}" aria-pressed="${o.key === active}" aria-label="${escapeHtml(o.label)}">
+      <div class="layout-preview" style="${escapeHtml(preview)}">${cells}</div>
       <div class="layout-name">${escapeHtml(o.label)}</div>
-    </div>`;
+    </button>`;
   }).join('');
 }
 document.getElementById('btnLayout').addEventListener('click', () => {
@@ -1801,7 +1877,7 @@ function updateFormatNote() {
   const key = document.getElementById('setFormat').value;
   const f = FORMAT_DEFS.find(x => x.key === key) || FORMAT_DEFS[0];
   const bits = ['Starting life ' + f.life];
-  bits.push(f.commander ? ('commander damage lethal at ' + f.cmdLethal) : 'no commander tracking');
+  bits.push(f.oathbreaker ? 'one planeswalker + one Signature Spell; independent +2 taxes; no commander damage' : f.commander ? ('commander damage lethal at ' + f.cmdLethal) : 'no commander tracking');
   if (f.teams) bits.push('players paired into teams of two with shared life');
   note.textContent = bits.join(' · ') + '.';
 }
@@ -1905,6 +1981,7 @@ document.getElementById('confirmYes').addEventListener('click', () => {
     Object.keys(p.counterValues).forEach(k => p.counterValues[k] = 0);
     Object.keys(p.commanderDmg).forEach(k => p.commanderDmg[k] = [0, 0]);
     p.commanderTax = [0, 0];
+    p.oathbreakerTax = [0, 0];
     p.lastDelta = 0;
   });
   render(); save();
@@ -1919,7 +1996,9 @@ document.getElementById('confirmFresh').addEventListener('click', () => {
     p.color = COLORS[i % COLORS.length];
     p.commanderCount = 1;
     p.commanderNames = ['Commander', 'Partner'];
+    p.oathbreakerNames = ['Oathbreaker', 'Signature Spell'];
     p.commanderTax = [0, 0];
+    p.oathbreakerTax = [0, 0];
     p.counters = { ...state.defaultCounters };
     p.counterValues = { poison: 0, energy: 0, exp: 0 };
     p.showCommander = formatHasCommander();
@@ -1956,8 +2035,9 @@ function cmdLabelOf(cmd) {
 
 // A player's total wins is the sum of their commanders' wins, so the headline
 // number always matches the per-commander breakdown shown beneath it.
+function profileEntries(p) { return [...((p && p.commanders) || []), ...((p && p.oathbreakers) || []).map(c => ({ ...c, format: 'oathbreaker' }))]; }
 function playerTotalWins(p) {
-  return ((p && p.commanders) || []).reduce((sum, c) => sum + (c.wins || 0), 0);
+  return profileEntries(p).reduce((sum, c) => sum + (c.wins || 0), 0);
 }
 
 // Wins bucketed by how many players were at the table. Stored as a plain map
@@ -1984,6 +2064,7 @@ function normalizeProfile(p) {
       color: p.color,
       wins: p.wins || 0,
       winsByCount: sanitizeWinsByCount(p.winsByCount),
+      oathbreakers: (p.oathbreakers || []).map(c => ({ names: (c.names || ['Oathbreaker', 'Signature Spell']).slice(0,2), count: 2, color: c.color || p.color, wins: c.wins || 0, winsByCount: sanitizeWinsByCount(c.winsByCount) })),
       commanders: p.commanders.map(c => ({
         names: (c.names || ['Commander', 'Partner']).slice(0, 2),
         count: c.count || 1,
@@ -2035,11 +2116,12 @@ function creditProfileWin(name, cmdNames, cmdCount, playerCount) {
     if (!player.winsByCount || typeof player.winsByCount !== 'object') player.winsByCount = {};
     player.winsByCount[pc] = (player.winsByCount[pc] || 0) + 1;
   }
+  const entries = isOathbreaker() ? (player.oathbreakers ||= []) : player.commanders;
   const sig = cmdSignature(cmdNames, cmdCount);
-  let cmd = (player.commanders || []).find(c => cmdSignature(c.names, c.count) === sig);
+  let cmd = entries.find(c => cmdSignature(c.names, c.count) === sig);
   if (!cmd) {
     cmd = { names: (cmdNames || ['Commander', 'Partner']).slice(0, 2), count: cmdCount || 1, color: player.color, wins: 0, winsByCount: {} };
-    player.commanders.push(cmd);
+    entries.push(cmd);
   }
   cmd.wins = (cmd.wins || 0) + 1;
   // Bucket this commander's win by table size too, so each per-size leaderboard
@@ -2079,7 +2161,7 @@ function lbCmdRow(c, fallbackColor, wins) {
   return `
       <div class="lb-cmd-row">
         <span class="roll-swatch" data-color="${c.color || fallbackColor}"></span>
-        <span class="lb-cmd-name">${escapeHtml(cmdLabelOf(c))}</span>
+        <span class="lb-cmd-name">${escapeHtml((c.format === 'oathbreaker' ? 'Oathbreaker: ' : '') + cmdLabelOf(c))}</span>
         <span class="lb-cmd-wins">${wins} ${wins === 1 ? 'win' : 'wins'}</span>
       </div>`;
 }
@@ -2095,7 +2177,7 @@ function renderOverallBoard(profiles) {
   }
   return ranked.map((p, i) => {
     const total = playerTotalWins(p);
-    const cmdRows = (p.commanders || []).slice()
+    const cmdRows = profileEntries(p).slice()
       .sort((a, b) => (b.wins || 0) - (a.wins || 0))
       .filter(c => (c.wins || 0) > 0)
       .map(c => lbCmdRow(c, p.color, c.wins)).join('');
@@ -2132,7 +2214,7 @@ function renderSizeBoard(profiles, n) {
   }
   return ranked.map((x, i) => {
     const p = x.p;
-    const cmdRows = (p.commanders || [])
+    const cmdRows = profileEntries(p)
       .map(c => ({ c, w: sanitizeWinsByCount(c.winsByCount)[n] || 0 }))
       .filter(o => o.w > 0)
       .sort((a, b) => b.w - a.w)
@@ -2185,22 +2267,22 @@ function renderProfileList() {
   // In commander-less formats (Standard/Legacy/Pauper) a profile applies only the
   // player's name + color — there's no commander to load, so the chip is a direct
   // "apply" button with no expandable commander sublist.
-  const hasCmd = formatHasCommander();
+  const hasCmd = formatHasCommander() || isOathbreaker();
   container.innerHTML = profiles.map((prof, i) => {
     const wins = playerTotalWins(prof);
     const winsBadge = wins > 0 ? `<span class="pwins" title="Total wins">🏆 ${wins}</span>` : '';
-    const cmds = prof.commanders || [];
+    const cmds = (isOathbreaker() ? prof.oathbreakers : prof.commanders) || [];
     const cmdChips = cmds.length ? cmds.map((c, ci) => {
       const cw = c.wins || 0;
       const cwBadge = cw > 0 ? `<span class="pwins" title="Wins with this commander">🏆 ${cw}</span>` : '';
-      return `<span class="cmd-chip" data-pi="${i}" data-ci="${ci}" title="Load this commander">
+      return `<span class="cmd-chip" data-pi="${i}" data-ci="${ci}" title="Load this setup">
         <span class="pcolor" data-color="${c.color || prof.color}"></span>
         <span class="pname">${escapeHtml(cmdLabelOf(c))}</span>
         ${cwBadge}
-        <button class="pdel cmddel" data-pi="${i}" data-ci="${ci}" title="Delete commander">×</button>
+        <button class="pdel cmddel" data-pi="${i}" data-ci="${ci}" title="Delete saved setup">×</button>
       </span>`;
-    }).join('') : '<div class="profile-empty" style="padding:4px 2px;">No commanders saved yet — pick a commander setup on this tile and Save.</div>';
-    const chipTitle = hasCmd ? 'Show commanders' : 'Load player (name & color)';
+    }).join('') : '<div class="profile-empty" style="padding:4px 2px;">No setups saved for this format — configure this tile and Save.</div>';
+    const chipTitle = hasCmd ? 'Show saved setups for this format' : 'Load player (name & color)';
     return `<div class="profile-player">
       <div class="profile-chip player-chip" data-player-idx="${i}" title="${chipTitle}">
         <span class="pcolor" data-color="${prof.color}"></span>
@@ -2257,10 +2339,10 @@ function renderProfileList() {
       const pi = parseInt(btn.dataset.pi);
       const ci = parseInt(btn.dataset.ci);
       const profs = loadProfiles();
-      if (!profs[pi] || !profs[pi].commanders[ci]) return;
-      const label = cmdLabelOf(profs[pi].commanders[ci]);
-      if (confirm(`Delete commander "${label}" from ${profs[pi].name}?`)) {
-        profs[pi].commanders.splice(ci, 1);
+      if (!profs[pi] || !(isOathbreaker() ? profs[pi].oathbreakers : profs[pi].commanders)?.[ci]) return;
+      const label = cmdLabelOf((isOathbreaker() ? profs[pi].oathbreakers : profs[pi].commanders)[ci]);
+      if (confirm(`Delete saved setup "${label}" from ${profs[pi].name}?`)) {
+        (isOathbreaker() ? profs[pi].oathbreakers : profs[pi].commanders).splice(ci, 1);
         saveProfiles(profs);
         renderProfileList();
       }
@@ -2290,6 +2372,13 @@ function saveCurrentAsProfile() {
 
   // Only record a commander entry in formats that use commanders. In commander-less
   // formats the profile keeps just the player's name + color.
+  if (isOathbreaker()) {
+    const names = p.oathbreakerNames.slice(0,2);
+    const entries = player.oathbreakers ||= [];
+    const existing = entries.find(c => cmdSignature(c.names, 2) === cmdSignature(names, 2));
+    if (existing) { existing.names = names; existing.color = p.color; }
+    else entries.push({ names, count: 2, color: p.color, wins: 0, winsByCount: {} });
+  }
   if (formatHasCommander()) {
     const names = (p.commanderNames || ['Commander', 'Partner']).slice(0, 2);
     const count = p.commanderCount || 1;
@@ -2316,13 +2405,16 @@ function applyProfile(playerIdx, cmdIdx) {
   if (!prof) return;
   const p = state.players[idx];
   p.name = prof.name;
-  const cmd = (prof.commanders || [])[cmdIdx];
+  const cmd = cmdIdx === null ? null : ((isOathbreaker() ? prof.oathbreakers : formatHasCommander() ? prof.commanders : []) || [])[cmdIdx];
   if (cmd) {
     p.color = cmd.color || prof.color || p.color;
-    p.commanderCount = cmd.count || 1;
-    p.commanderNames = (cmd.names && cmd.names.length)
-      ? cmd.names.slice(0, 2).concat(['Commander', 'Partner']).slice(0, 2)
-      : ['Commander', 'Partner'];
+    if (isOathbreaker()) p.oathbreakerNames = cmd.names.slice(0,2);
+    else {
+      p.commanderCount = cmd.count || 1;
+      p.commanderNames = (cmd.names && cmd.names.length)
+        ? cmd.names.slice(0, 2).concat(['Commander', 'Partner']).slice(0, 2)
+        : ['Commander', 'Partner'];
+    }
   } else {
     p.color = prof.color || p.color;
   }
@@ -2333,7 +2425,7 @@ function applyProfile(playerIdx, cmdIdx) {
 
 document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('pmSaveProfile');
-  if (btn) btn.addEventListener('click', saveCurrentAsProfile);
+  if (btn && !btn.dataset.bound) { btn.dataset.bound = '1'; btn.addEventListener('click', saveCurrentAsProfile); }
 });
 // Also bind immediately in case script runs after DOM ready
 (function bindProfileSaveBtn() {
@@ -2499,7 +2591,7 @@ document.getElementById('lbReset').addEventListener('click', () => {
   profiles.forEach(p => {
     p.wins = 0;
     p.winsByCount = {};
-    (p.commanders || []).forEach(c => { c.wins = 0; c.winsByCount = {}; });
+    [...(p.commanders || []), ...(p.oathbreakers || [])].forEach(c => { c.wins = 0; c.winsByCount = {}; });
   });
   saveProfiles(profiles);
   renderLeaderboard();
@@ -2516,7 +2608,7 @@ function exportProfiles() {
   if (!profiles.length) { alert('No saved profiles to export yet.'); return; }
   const payload = {
     type: 'mtg-life-profiles',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     profiles,
   };
@@ -2540,11 +2632,13 @@ function mergeProfiles(existing, incoming) {
     const match = out.find(p => p.name && inc.name && p.name.toLowerCase() === inc.name.toLowerCase());
     if (!match) { out.push(inc); return; }
     match.color = inc.color || match.color;
-    (inc.commanders || []).forEach(ic => {
+    ['commanders', 'oathbreakers'].forEach(kind => {
+    match[kind] ||= [];
+    (inc[kind] || []).forEach(ic => {
       const sig = cmdSignature(ic.names, ic.count);
-      const ec = match.commanders.find(c => cmdSignature(c.names, c.count) === sig);
+      const ec = match[kind].find(c => cmdSignature(c.names, c.count) === sig);
       if (!ec) {
-        match.commanders.push(ic);
+        match[kind].push(ic);
       } else {
         ec.wins = Math.max(ec.wins || 0, ic.wins || 0);
         ec.color = ic.color || ec.color;
@@ -2555,6 +2649,7 @@ function mergeProfiles(existing, incoming) {
           ec.winsByCount[k] = Math.max(ec.winsByCount[k] || 0, icCmdBuckets[k]);
         });
       }
+    });
     });
     // Merge table-size buckets the same idempotent way: keep the higher tally
     // per size so re-importing the same file never inflates the numbers.
@@ -2703,4 +2798,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 </script>
 </body>
 </html>
-<!-- BUILD-STAMP 2026-09-04 v10.3.0 — selectable table layouts for 2–6 players -->
+<!-- BUILD-STAMP 2026-10-06 v10.4.0 — Oathbreaker, responsive counters, single-surface settings -->
